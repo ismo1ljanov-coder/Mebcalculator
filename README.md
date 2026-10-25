@@ -16,3 +16,4 @@ Hisob yadrosi: `src/core/` (binPacking, edge, templates, calculator).
 - **GitHub Pages:** Settings → Pages → Source: "GitHub Actions". Har `main`ga push qilinganda sayt yangilanadi.
 - **Netlify / Cloudflare Pages:** build command `npm run build`, publish directory `dist`.
 Domen: hosting sozlamalaridan o'z domeningizni ulang.
+
