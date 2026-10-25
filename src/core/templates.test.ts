@@ -1,0 +1,100 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import {
+  buildShkaf,
+  buildKupe,
+  buildOshxona,
+  buildKrovat,
+  buildDivan,
+  SHKAF_DEFAULT,
+  KUPE_DEFAULT,
+  OSHXONA_DEFAULT,
+  KROVAT_DEFAULT,
+  DIVAN_DEFAULT,
+  hingesPerDoor,
+} from "./templates.ts";
+import { calculate, type Prices } from "./calculator.ts";
+
+const PRICES: Prices = {
+  sheetByThickness: { 16: 100, 18: 120 },
+  edgePerMeter: 10,
+  backPanelSheet: 50,
+  labor: { mode: "percent", value: 20 },
+  marginPercent: 10,
+};
+const SHEET = { length: 2750, width: 1830, kerf: 4, trim: 10 };
+
+test("sharnir soni balandlikka qarab", () => {
+  assert.equal(hingesPerDoor(700), 2);
+  assert.equal(hingesPerDoor(1200), 3);
+  assert.equal(hingesPerDoor(1900), 4);
+  assert.equal(hingesPerDoor(2300), 5);
+});
+
+test("shkaf: detallar o'lchami qo'lda hisobga mos", () => {
+  // 1200 x 2200 x 550, t=16, 4 javon, 2 eshik
+  const r = buildShkaf(SHKAF_DEFAULT);
+  const byName = (n: string) => r.parts.find((p) => p.name === n)!;
+  const yon = byName("Yon devor");
+  assert.deepEqual([yon.length, yon.width, yon.qty], [2200, 550, 2]);
+  const tepa = byName("Tepa");
+  assert.deepEqual([tepa.length, tepa.width], [1200 - 32, 550]); // 1168
+  const javon = byName("Javon");
+  assert.deepEqual([javon.length, javon.width, javon.qty], [1166, 530, 4]);
+  const eshik = byName("Eshik");
+  // (1200 - 3*3)/2 = 595.5 → 596 (yaxlitlanadi), balandlik 2200 - 6 = 2194
+  assert.equal(eshik.length, 2194);
+  assert.equal(eshik.width, 595);
+  assert.equal(eshik.qty, 2);
+  // orqa devor (1196 x 2196) mm² → m²
+  assert.ok(Math.abs(r.backPanelM2 - (1196 * 2196) / 1e6) < 1e-9);
+  // sharnir: 2194 mm balandlik → 5 ta har eshikka → 10
+  const hinge = r.furniture.find((f) => f.name.startsWith("Sharnir (")) !;
+  assert.equal(hinge.qty, 10);
+});
+
+test("barcha shablonlar hisoblanadi va hech narsa 'sig'maydi' demaydi", () => {
+  const builds = [
+    buildShkaf(SHKAF_DEFAULT),
+    buildKupe(KUPE_DEFAULT),
+    buildOshxona(OSHXONA_DEFAULT),
+    buildKrovat(KROVAT_DEFAULT),
+    buildDivan(DIVAN_DEFAULT),
+  ];
+  for (const b of builds) {
+    assert.ok(b.parts.length > 0);
+    const c = calculate(b, SHEET, PRICES);
+    const sigmadi = c.warnings.filter((w) => w.includes("sig'maydi"));
+    assert.deepEqual(sigmadi, []);
+    for (const g of c.groups) {
+      assert.ok(g.pack.utilization > 0 && g.pack.utilization <= 100);
+      // Joylashtirilgan detallar soni = so'ralgan detallar soni
+      const placed = g.pack.sheets.reduce((s, x) => s + x.placements.length, 0);
+      assert.equal(placed, g.partsCount);
+    }
+    assert.ok(c.cost.total > 0);
+  }
+});
+
+test("narx: tannarx formulasi to'g'ri", () => {
+  const b = buildShkaf(SHKAF_DEFAULT);
+  const c = calculate(b, SHEET, PRICES);
+  const materials = c.cost.ldsp + c.cost.edge + c.cost.backPanel;
+  assert.ok(Math.abs(c.cost.labor - materials * 0.2) < 1e-6);
+  assert.ok(Math.abs(c.cost.subtotal - materials * 1.2) < 1e-6);
+  assert.ok(Math.abs(c.cost.total - materials * 1.2 * 1.1) < 1e-6);
+});
+
+test("kupe: eshik eni (rels qoplashi bilan) ichki kenglikka mos", () => {
+  const r = buildKupe(KUPE_DEFAULT);
+  const e = r.parts.find((p) => p.name.startsWith("Kupe eshik"))!;
+  // (1800 - 32 + 30)/2 = 899
+  assert.equal(e.width, 899);
+  assert.equal(e.qty, 2);
+});
+
+test("noto'g'ri katta detal ogohlantirish beradi", () => {
+  const huge = buildShkaf({ ...SHKAF_DEFAULT, height: 3200 });
+  const c = calculate(huge, SHEET, PRICES);
+  assert.ok(c.warnings.some((w) => w.includes("sig'maydi")));
+});

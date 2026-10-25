@@ -1,0 +1,11 @@
+{
+  "name": "mebcalculator",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node --test src/core/core.test.ts src/core/templates.test.ts src/ui/render.test.ts",
+    "serve": "node scripts/serve.mjs"
+  }
+}
