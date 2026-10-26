@@ -1,5 +1,5 @@
 import type { CalcResult } from "../core/calculator.ts";
-import { dividerCount, legCountFor, legHeightOf } from "../core/templates.ts";
+import { dividerCount, legCountFor, legHeightOf, sectionPlan, shelfYs } from "../core/templates.ts";
 import type { BuildResult, FurnitureType, KitchenModule } from "../core/templates.ts";
 import type { PackedSheet, Part } from "../core/types.ts";
 import type { AppState } from "./forms.ts";
@@ -275,30 +275,26 @@ function frontCabinet(o: {
   g.push(`<rect x="${x}" y="${y}" width="${W}" height="${bodyH}" class="wood"/>`);
   g.push(`<rect x="${x + t}" y="${y + t}" width="${W - 2 * t}" height="${bodyH - 2 * t}" class="woodin"/>`);
   const innerH = bodyH - 2 * t;
-  // O'rta bokovoylar va ularning orasidagi javonlar
+  // O'rta bokovoylar, osma (shtanga) va javonli bo'limlar, tortmalar
   const nd = dividerCount(W - 2 * t, shelves > 0);
   const secW = (W - 2 * t - nd * t) / (nd + 1);
   const secX = (k: number) => x + t + k * (secW + t);
   for (let k = 1; k <= nd; k++) g.push(`<rect x="${secX(k) - t}" y="${y + t}" width="${t}" height="${innerH}" class="wood"/>`);
-  for (let k = 0; k <= nd; k++) {
-    for (let i = 1; i <= shelves; i++) {
-      const sy = y + t + (innerH * i) / (shelves + 1) - t / 2;
-      g.push(`<rect x="${secX(k)}" y="${sy}" width="${secW}" height="${t}" class="shelf"/>`);
+  const plan = sectionPlan(nd + 1, shelves, rods, drawers);
+  const dh = drawers > 0 ? Math.min(180, innerH / (drawers + 1)) : 0;
+  plan.forEach((role, k) => {
+    const dzone = role.drawers > 0 ? role.drawers * (dh + 4) + 3 : 0;
+    const floorY = y + bodyH - t;
+    for (const sy of shelfYs(0, innerH - dzone, role.shelves, t)) {
+      g.push(`<rect x="${secX(k)}" y="${floorY - dzone - sy - t}" width="${secW}" height="${t}" class="shelf"/>`);
     }
-  }
-  for (let r = 0; r < rods; r++) {
-    const k = Math.min(nd, r);
-    g.push(`<line x1="${secX(k) + 10}" y1="${y + t + 130}" x2="${secX(k) + secW - 10}" y2="${y + t + 130}" class="rodl"/>`);
-  }
-  if (drawers > 0) {
-    const dh = Math.min(180, innerH / (drawers + 1));
-    for (let i = 0; i < drawers; i++) {
-      const dy = y + bodyH - t - (i + 1) * (dh + 4);
-      g.push(`<rect x="${x + t + 3}" y="${dy}" width="${W - 2 * t - 6}" height="${dh}" class="door"/><line x1="${x + W / 2 - 60}" y1="${dy + dh / 2}" x2="${x + W / 2 + 60}" y2="${dy + dh / 2}" class="handle"/>`);
+    if (role.rod) g.push(`<line x1="${secX(k) + 10}" y1="${y + t + 140}" x2="${secX(k) + secW - 10}" y2="${y + t + 140}" class="rodl"/>`);
+    for (let i = 0; i < role.drawers; i++) {
+      const dy = floorY - 3 - (i + 1) * (dh + 4) + 4;
+      g.push(`<rect x="${secX(k) + 3}" y="${dy}" width="${secW - 6}" height="${dh}" class="door"/><line x1="${secX(k) + secW / 2 - 60}" y1="${dy + dh / 2}" x2="${secX(k) + secW / 2 + 60}" y2="${dy + dh / 2}" class="handle"/>`);
     }
-  }
-  const doorBottom = drawers > 0 ? Math.min(180, innerH / (drawers + 1)) * drawers + 4 * drawers + 0 : 0;
-  const dH = bodyH - 6 - doorBottom;
+  });
+  const dH = bodyH - 6;
   if (doors > 0) {
     const gap = 3;
     const dw = (W - gap * (doors + 1)) / doors;

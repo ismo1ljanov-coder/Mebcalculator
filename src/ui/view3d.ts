@@ -1,7 +1,7 @@
 // Kutubxonasiz 3D ko'rinish: mebel to'g'ri burchakli bo'laklardan (box) yig'iladi, SVG'da chiziladi.
 // Orqada turgan bo'laklar oldin chiziladi (ressomlar usuli), tartib har bir juft bo'lak orasidagi
 // ajratuvchi tekislik bo'yicha aniqlanadi, shuning uchun istalgan burchakdan to'g'ri chiqadi.
-import { dividerCount, legCountFor, legHeightOf } from "../core/templates.ts";
+import { dividerCount, legCountFor, legHeightOf, sectionPlan, shelfYs } from "../core/templates.ts";
 import type { AppState } from "./forms.ts";
 
 export type Mat = "body" | "back" | "door" | "leg" | "tsokol" | "counter" | "mattress" | "fabric" | "handle" | "wood" | "alu" | "fartuk";
@@ -38,30 +38,30 @@ export function buildScene(state: AppState, opts: { inside?: boolean } = {}): Sc
         // O'rta bokovoylar (kupe eshigi ortidan ham ko'rinadi, shuning uchun doim chiziladi)
         for (let k = 1; k <= nd; k++) B.push(bx(secX(k) - t, secX(k), lh + t, H - t, 0, D, "body"));
       }
-      if (inside) {
-        for (let k = 0; k <= nd; k++) {
-          for (let i = 1; i <= p.shelves; i++) {
-            const y = lh + t + (innerH * i) / (p.shelves + 1) - t / 2;
-            B.push(bx(secX(k), secX(k) + secW, y, y + t, 4, D - 20, "body"));
+      const plan = sectionPlan(nd + 1, p.shelves, p.rods, p.drawers);
+      const dh = p.drawers > 0 ? Math.min(180, innerH / (p.drawers + 1)) : 0;
+      // Eshik bor bo'lsa tortmalar eshik ortida (ichkarida), ochiq shkafda esa old tomonda
+      const behind = state.type === "kupe" || state.params.shkaf.doors > 0;
+      const dz = behind ? D - 110 : D;
+      plan.forEach((role, k) => {
+        const drawersTop = lh + t + (role.drawers > 0 ? role.drawers * (dh + 4) + 3 : 0);
+        if (inside) {
+          // Javonlar: tortmalar tepasidan shiftgacha bo'lgan oraliqda
+          for (const y of shelfYs(drawersTop, H - t, role.shelves, t)) B.push(bx(secX(k), secX(k) + secW, y, y + t, 4, D - 20, "body"));
+          // Osma bo'lim: shtanga tepaga yaqin, javonsiz
+          if (role.rod) B.push(bx(secX(k) + 8, secX(k) + secW - 8, H - t - 150, H - t - 130, D / 2 - 10, D / 2 + 10, "alu"));
+        }
+        // Tortmalar o'z bo'limida (kupe eshigi ortida, shkafda old tomonda)
+        for (let i = 0; i < role.drawers; i++) {
+          const y0 = lh + t + 3 + i * (dh + 4);
+          B.push(bx(secX(k) + 3, secX(k) + secW - 3, y0, y0 + dh, dz, dz + t, "door"));
+          if (!behind) {
+            const cx = secX(k) + secW / 2;
+            B.push(bx(cx - 70, cx + 70, y0 + dh / 2 - 7, y0 + dh / 2 + 7, dz + t, dz + t + 18, "handle"));
           }
         }
-        for (let r = 0; r < p.rods; r++) {
-          const k = Math.min(nd, r);
-          B.push(bx(secX(k) + 8, secX(k) + secW - 8, H - t - 140, H - t - 120, D / 2 - 10, D / 2 + 10, "alu"));
-        }
-      }
-      // tortmalar: birinchi bo'limda. Kupe eshigi ortida (ichkarida), shkafda esa old tomonda
-      const dh = p.drawers > 0 ? Math.min(180, innerH / (p.drawers + 1)) : 0;
-      const dz = state.type === "kupe" ? D - 110 : D;
-      for (let i = 0; i < p.drawers; i++) {
-        const y0 = lh + t + 3 + i * (dh + 4);
-        B.push(bx(secX(0) + 3, secX(0) + secW - 3, y0, y0 + dh, dz, dz + t, "door"));
-        if (state.type !== "kupe") {
-          const cx = secX(0) + secW / 2;
-          B.push(bx(cx - 70, cx + 70, y0 + dh / 2 - 7, y0 + dh / 2 + 7, dz + t, dz + t + 18, "handle"));
-        }
-      }
-      const doorBottom = lh + 3 + (p.drawers > 0 ? p.drawers * (dh + 4) + t : 0);
+      });
+      const doorBottom = lh + 3;
       if (!inside) {
         if (state.type === "shkaf" && state.params.shkaf.doors > 0) {
           const n = state.params.shkaf.doors;

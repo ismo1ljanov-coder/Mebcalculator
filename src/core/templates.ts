@@ -134,6 +134,25 @@ export function dividerCount(inner: number, hasShelves: boolean): number {
   return Math.max(0, Math.ceil(inner / span) - 1);
 }
 
+export type SectionRole = { rod: boolean; shelves: number; drawers: number };
+
+/**
+ * Bo'limlar vazifasi (haqiqiy shkafdagidek): birinchi `rods` ta bo'lim OSMA (shtanga, javonsiz),
+ * qolganlarida JAVONLAR; tortmalar javonli bo'limning pastida (hammasi osma bo'lsa, oxirgisida).
+ * `shelves` = har bir javonli bo'limdagi javonlar soni.
+ */
+export function sectionPlan(sections: number, shelves: number, rods: number, drawers: number): SectionRole[] {
+  const r = Math.min(Math.max(0, rods), sections);
+  const plan: SectionRole[] = Array.from({ length: sections }, (_, k) => ({ rod: k < r, shelves: k < r ? 0 : shelves, drawers: 0 }));
+  if (drawers > 0) plan[r < sections ? r : sections - 1].drawers = drawers;
+  return plan;
+}
+
+/** n ta javonning pastki qirrasi balandligi (bo'sh joy [bottom, top] ichida teng taqsimlangan) */
+export function shelfYs(bottom: number, top: number, n: number, t: number): number[] {
+  return Array.from({ length: n }, (_, i) => bottom + ((top - bottom) * (i + 1)) / (n + 1) - t / 2);
+}
+
 /** Karkas: ikki yon, tepa, past, o'rta bokovoy, javonlar */
 function carcass(p: ShkafParams, label = "") {
   const t = p.thickness;
@@ -150,10 +169,12 @@ function carcass(p: ShkafParams, label = "") {
     mk(`${label}Past${pieces > 1 ? " (bo'lak)" : ""}`, pieceLen, p.depth, pieces, t, { edge: frontEdge }),
   ];
   if (d > 0) parts.push(mk(`${label}O'rta bokovoy`, bodyH - 2 * t, p.depth, d, t, { grain: true, edge: frontEdge }));
-  if (p.shelves > 0) {
-    parts.push(mk(`${label}Javon`, Math.floor(secW) - 2, p.depth - 20, p.shelves * (d + 1), t, { edge: frontEdge }));
+  const plan = sectionPlan(d + 1, p.shelves, p.rods, p.drawers);
+  const totalShelves = plan.reduce((x, r) => x + r.shelves, 0);
+  if (totalShelves > 0) {
+    parts.push(mk(`${label}Javon`, Math.floor(secW) - 2, p.depth - 20, totalShelves, t, { edge: frontEdge }));
   }
-  return { parts, d, secW, pieces };
+  return { parts, d, secW, pieces, plan, totalShelves };
 }
 
 /** Bitta LDSP panelining eng katta uzunligi (list 2750 mm dan trim va kesim ayirilgan) */
@@ -161,7 +182,7 @@ const MAX_PANEL = 2700;
 
 export function buildShkaf(p: ShkafParams): BuildResult {
   const t = p.thickness;
-  const { parts, d, secW, pieces } = carcass(p);
+  const { parts, d, secW, pieces, plan, totalShelves } = carcass(p);
   const furniture: FurnitureItem[] = [];
   const notes: string[] = [];
   const bodyH = p.height - legHeightOf(p);
@@ -195,24 +216,35 @@ export function buildShkaf(p: ShkafParams): BuildResult {
     if (d > 0) notes.push("Tortmalar birinchi (chap) bo'limga qo'yiladi.");
   }
 
-  if (p.shelves > 0) {
-    furniture.push({ name: "Javon tayanchi (polka tayanchi)", qty: p.shelves * (d + 1) * 4, unit: "dona" });
+  if (totalShelves > 0) {
+    furniture.push({ name: "Javon tayanchi (polka tayanchi)", qty: totalShelves * 4, unit: "dona" });
   }
-  if (p.rods > 0) addRods(p.rods, secW, furniture);
-  const joints = 8 + d * 4 + p.shelves * (d + 1) * 4;
+  addRods(plan.filter((r) => r.rod).length, secW, furniture);
+  const joints = 8 + d * 4 + totalShelves * 4;
   furniture.push({ name: "Konfirmat (7x50) yoki minifiks", qty: joints, unit: "dona" });
   furniture.push({ name: "DVP mix (mix 3x16)", qty: Math.ceil(((p.width + bodyH) * 2) / 150), unit: "dona", note: "orqa devor uchun, ~150 mm qadam" });
 
   addLegs(p, parts, furniture, notes);
 
   addDividerNote(d, secW, p.shelves > 0, notes);
+  addPlanNote(plan, notes);
   addSplitNote(pieces, notes);
   addWallBrackets(p.height, furniture, notes);
 
   return { parts, backPanelM2, furniture, notes };
 }
 
+function addPlanNote(plan: SectionRole[], notes: string[]) {
+  const hang = plan.filter((r) => r.rod).length;
+  const shelf = plan.length - hang;
+  const dr = plan.findIndex((r) => r.drawers > 0);
+  const parts = [`${plan.length} ta bo'lim: ${hang} ta osma (shtanga), ${shelf} ta javonli`];
+  if (dr >= 0) parts.push(`tortmalar ${dr + 1}-bo'limda, pastda`);
+  notes.push(parts.join(", ") + ".");
+}
+
 function addRods(n: number, secW: number, furniture: FurnitureItem[]) {
+  if (n <= 0) return;
   furniture.push({ name: "Shtanga (kiyim osish, oval)", qty: n, unit: "dona", note: `~${Math.floor(secW) - 4} mm (bo'lim eni)` });
   furniture.push({ name: "Shtanga ushlagich", qty: n * 2, unit: "dona" });
 }
@@ -250,7 +282,7 @@ export const KUPE_DEFAULT: KupeParams = {
 
 export function buildKupe(p: KupeParams): BuildResult {
   const t = p.thickness;
-  const { parts, d, secW, pieces } = carcass({ ...p, doors: 0 });
+  const { parts, d, secW, pieces, plan, totalShelves } = carcass({ ...p, doors: 0 });
   const furniture: FurnitureItem[] = [];
   const notes: string[] = [];
   const bodyH = p.height - legHeightOf(p);
@@ -270,14 +302,15 @@ export function buildKupe(p: KupeParams): BuildResult {
   furniture.push({ name: "Eshik ramka profili (gorizontal)", qty: n * 2, unit: "dona", note: `${Math.round(doorW)} mm` });
   furniture.push({ name: "Yumshoq yopgich (dovodchik)", qty: n, unit: "dona", note: "ixtiyoriy, jimgina yopilishi uchun" });
   furniture.push({ name: "To'xtatgich (stopper)", qty: 2, unit: "dona" });
-  if (p.shelves > 0) furniture.push({ name: "Javon tayanchi", qty: p.shelves * (d + 1) * 4, unit: "dona" });
-  if (p.rods > 0) addRods(p.rods, secW, furniture);
-  furniture.push({ name: "Konfirmat (7x50) yoki minifiks", qty: 8 + d * 4 + p.shelves * (d + 1) * 4, unit: "dona" });
+  if (totalShelves > 0) furniture.push({ name: "Javon tayanchi", qty: totalShelves * 4, unit: "dona" });
+  addRods(plan.filter((r) => r.rod).length, secW, furniture);
+  furniture.push({ name: "Konfirmat (7x50) yoki minifiks", qty: 8 + d * 4 + totalShelves * 4, unit: "dona" });
   furniture.push({ name: "DVP mix (3x16)", qty: Math.ceil(((p.width + bodyH) * 2) / 150), unit: "dona" });
 
   addLegs(p, parts, furniture, notes);
 
   addDividerNote(d, secW, p.shelves > 0, notes);
+  addPlanNote(plan, notes);
   addSplitNote(pieces, notes);
   addWallBrackets(p.height, furniture, notes);
   notes.push("Kupe eshiklari g'ildirakda yonga suriladi (ruchka yo'q). Eshik o'lchami tizim ishlab chiqaruvchisining jadvaliga qarab tekshirilsin: har brend ruxsat etgan balandlik va og'irligi farq qiladi.");

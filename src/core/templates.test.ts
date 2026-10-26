@@ -220,3 +220,30 @@ test("oshxona: osma planka, tumba biriktirish boltlari va krovat sandiq orqa/tag
   assert.ok(k.parts.some((p) => p.name === "Sandiq tortma orqa"));
   assert.ok(k.furniture.some((f) => f.name === "Tortma taglik DVP"));
 });
+
+import { sectionPlan, shelfYs } from "./templates.ts";
+
+test("bo'lim rejasi: osma bo'limda javon yo'q, tortma javonli bo'limda pastda", () => {
+  const plan = sectionPlan(3, 4, 1, 2);
+  assert.deepEqual(plan, [
+    { rod: true, shelves: 0, drawers: 0 },
+    { rod: false, shelves: 4, drawers: 2 },
+    { rod: false, shelves: 4, drawers: 0 },
+  ]);
+  // hammasi osma bo'lsa javon yo'q, tortma oxirgi bo'limda
+  const all = sectionPlan(2, 4, 5, 1);
+  assert.equal(all.reduce((s, r) => s + r.shelves, 0), 0);
+  assert.equal(all[1].drawers, 1);
+  const ys = shelfYs(0, 1000, 4, 16);
+  assert.equal(ys.length, 4);
+  assert.ok(ys[0] > 0 && ys[3] < 1000);
+});
+
+test("shkaf 1800: javon soni faqat javonli bo'limlar uchun hisoblanadi", () => {
+  const r = buildShkaf({ ...SHKAF_DEFAULT, width: 1800, shelves: 4, rods: 1 });
+  const javon = r.parts.find((p) => p.name === "Javon")!;
+  // 1800 mm, javonli: 2 ta bokovoy → 3 bo'lim; 1 ta osma, 2 ta javonli → 8 ta javon
+  assert.equal(javon.qty, 8);
+  assert.ok(r.notes.some((n) => n.includes("1 ta osma")));
+  assert.equal(r.furniture.find((f) => f.name.startsWith("Shtanga ("))!.qty, 1);
+});
