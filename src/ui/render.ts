@@ -134,6 +134,44 @@ export function cutSection(calc: CalcResult, dims: { length: number; width: numb
   return html.join("");
 }
 
+// ------------------------------------------------------------ Yorliqlar (etiketka)
+
+function edgeIcon(p: Part): string {
+  const w = 76;
+  const h = Math.max(24, Math.min(54, (p.width / p.length) * w * 1.6));
+  const x = 6;
+  const y = 6;
+  const thick = (on: boolean) => (on ? `stroke="#000" stroke-width="4"` : `stroke="#999" stroke-width="1"`);
+  const e = p.edge;
+  return `<svg class="eico" viewBox="0 0 ${w + 12} ${h + 12}" aria-hidden="true">
+<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#fff" stroke="none"/>
+<line x1="${x}" y1="${y}" x2="${x + w}" y2="${y}" ${thick(e.L1)}/><line x1="${x}" y1="${y + h}" x2="${x + w}" y2="${y + h}" ${thick(e.L2)}/>
+<line x1="${x}" y1="${y}" x2="${x}" y2="${y + h}" ${thick(e.W1)}/><line x1="${x + w}" y1="${y}" x2="${x + w}" y2="${y + h}" ${thick(e.W2)}/>
+${p.grain ? `<line x1="${x + 10}" y1="${y + h / 2}" x2="${x + w - 10}" y2="${y + h / 2}" stroke="#777" stroke-width="1" stroke-dasharray="3 3"/>` : ""}
+</svg>`;
+}
+
+/** Har bir detal nusxasi uchun bitta yorliq: raqam, nomi, o'lchami, kant, qaysi list */
+export function labelsSection(calc: CalcResult, parts: Part[], title = ""): string {
+  const sheetOf = new Map<string, string>();
+  for (const g of calc.groups) {
+    g.pack.sheets.forEach((sh, i) => {
+      for (const pl of sh.placements) sheetOf.set(`${pl.partId}#${pl.index}`, `${g.thickness} mm, ${i + 1}-list`);
+    });
+  }
+  let n = 0;
+  const cards: string[] = [];
+  for (const p of parts) {
+    for (let i = 1; i <= p.qty; i++) {
+      n++;
+      const e = [p.edge.L1 && "U1", p.edge.L2 && "U2", p.edge.W1 && "E1", p.edge.W2 && "E2"].filter(Boolean).join(" ");
+      const list = sheetOf.get(`${p.id}#${i}`) ?? sheetOf.get(`${p.id}#${i - 1}`) ?? "";
+      cards.push(`<div class="lbl"><div class="lbl-n">${n}</div><div class="lbl-b"><b>${esc(p.name)}</b><span class="lbl-s">${p.length} × ${p.width} mm · ${p.thickness} mm</span><span>Kant: ${e || "yo'q"}${p.grain ? " · tola ↔" : ""}</span><span class="lbl-l">${esc(list)}${title ? " · " + esc(title) : ""}</span></div>${edgeIcon(p)}</div>`);
+    }
+  }
+  return `<p class="muted">Jami ${n} ta yorliq. Qalin chiziq: kant yopishtiriladigan tomon. Chop etib, har bir detalga yopishtiring.</p><div class="lbls">${cards.join("")}</div>`;
+}
+
 // ------------------------------------------------------------ Material va narx
 
 export function materialSection(calc: CalcResult, sheet: { length: number; width: number }, state: AppState): string {

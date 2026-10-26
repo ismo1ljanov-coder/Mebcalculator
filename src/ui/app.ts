@@ -34,6 +34,7 @@ import {
   materialSection,
   partsTable,
   partsCheck,
+  labelsSection,
   statsStrip,
   typeTitle,
 } from "./render.ts";
@@ -43,6 +44,7 @@ const PKEY = "mebcalc.projects.v2";
 const TABS = [
   ["raskroy", "Raskroy"],
   ["kesim", "Kesim ro'yxati"],
+  ["yorliq", "Yorliqlar"],
   ["material", "Material va narx"],
   ["furnitura", "Furnitura"],
   ["maslahat", "Maslahat"],
@@ -309,6 +311,7 @@ function update() {
 
   const panes: Record<string, string> = {
     raskroy: cutSection(calc, dims, build.parts),
+    yorliq: `<button type="button" class="hbtn" data-printlabels="1" style="margin-bottom:10px">Yorliqlarni chop etish</button>${labelsSection(calc, build.parts, state.title)}`,
     kesim: `<button type="button" class="hbtn" id="copycut" style="margin-bottom:10px">Ro'yxatni nusxalash</button>${partsCheck(build.parts, calc)}${partsTable(build.parts)}`,
     material: materialSection(calc, state.sheet, state),
     furnitura: furnitureSection(build),
@@ -421,7 +424,12 @@ function onClick(e: Event) {
   if (!t) return;
   const d = t.dataset;
 
-  if (d.vmode) {
+  if (d.printlabels) {
+    document.body.classList.add("only-labels");
+    const done = () => document.body.classList.remove("only-labels");
+    window.addEventListener("afterprint", done, { once: true });
+    window.print();
+  } else if (d.vmode) {
     mode = d.vmode as "2d" | "3d";
     update();
   } else if (d.vinside) {

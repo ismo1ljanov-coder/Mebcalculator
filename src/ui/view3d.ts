@@ -355,7 +355,7 @@ const LIGHT: V3 = (() => {
 })();
 
 export const VIEW_W = 1000;
-export const VIEW_H = 760;
+export const VIEW_H = 860;
 
 export function defaultView(): View {
   return { yaw: -32, pitch: 18 };
@@ -371,10 +371,18 @@ export function renderScene(scene: Scene, view: View): string {
     mx = [Math.max(mx[0], b.x1), Math.max(mx[1], b.y1), Math.max(mx[2], b.z1)];
   }
   const center: V3 = [(mn[0] + mx[0]) / 2, (mn[1] + mx[1]) / 2, (mn[2] + mx[2]) / 2];
-  const R = 0.5 * Math.hypot(mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2]);
-  const s = (Math.min(VIEW_W, VIEW_H) * 0.5 * 0.92) / R;
-  const cx = VIEW_W / 2;
-  const cy = VIEW_H / 2;
+  // Ekranga to'liq sig'dirish: proyeksiya chegarasi bo'yicha masshtab va markaz
+  let sx0 = Infinity, sx1 = -Infinity, sy0 = Infinity, sy1 = -Infinity;
+  for (const b of boxes) {
+    for (const x of [b.x0, b.x1]) for (const y of [b.y0, b.y1]) for (const z of [b.z0, b.z1]) {
+      const r = rot(x - center[0], y - center[1], z - center[2]);
+      sx0 = Math.min(sx0, r[0]); sx1 = Math.max(sx1, r[0]);
+      sy0 = Math.min(sy0, -r[1]); sy1 = Math.max(sy1, -r[1]);
+    }
+  }
+  const s = Math.min((VIEW_W * 0.92) / (sx1 - sx0), (VIEW_H * 0.88) / (sy1 - sy0));
+  const cx = VIEW_W / 2 - ((sx0 + sx1) / 2) * s;
+  const cy = VIEW_H / 2 - ((sy0 + sy1) / 2) * s;
   const P = (x: number, y: number, z: number): [number, number] => {
     const r = rot(x - center[0], y - center[1], z - center[2]);
     return [cx + r[0] * s, cy - r[1] * s];

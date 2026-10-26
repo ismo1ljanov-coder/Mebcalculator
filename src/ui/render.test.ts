@@ -61,3 +61,18 @@ test("narx kiritilmasa, material bo'limi ogohlantiradi", () => {
   const calc = calculate(build, state.sheet, state.prices);
   assert.ok(materialSection(calc, state.sheet, state).includes("Narxlar kiritilmagan"));
 });
+
+import { labelsSection } from "./render.ts";
+import { calculate as calc2 } from "../core/calculator.ts";
+import { buildFor as bf2, defaultState as ds2 } from "./forms.ts";
+
+test("yorliqlar: har bir detal nusxasi uchun bitta yorliq va list raqami bor", () => {
+  const st = ds2();
+  const b = bf2(st);
+  const c = calc2(b, st.sheet, st.prices);
+  const html = labelsSection(c, b.parts);
+  const total = b.parts.reduce((s, p) => s + p.qty, 0);
+  assert.equal((html.match(/class="lbl"/g) ?? []).length, total);
+  assert.ok(html.includes("-list"));
+  assert.ok(html.includes(`Jami ${total} ta yorliq`));
+});

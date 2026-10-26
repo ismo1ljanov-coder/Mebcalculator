@@ -12,7 +12,7 @@
   --wood: #e6cda3;
   --woodin: #d5b685;
   --shelf: #b98f52;
-  --door: rgba(24, 32, 36, 0.05);
+  --door: #f3eee3;
   --door-line: #8a6a3a;
   --leg: #aab3b7;
   --tsokol: #6c5a3c;
@@ -35,7 +35,7 @@
     --wood: #8b6d47;
     --woodin: #6d5436;
     --shelf: #b88c4c;
-    --door: rgba(255, 255, 255, 0.06);
+    --door: #3b454a;
     --door-line: #cba66b;
     --leg: #b9c2c6;
     --tsokol: #8b7650;
@@ -224,7 +224,7 @@ svg.cut .lbl2 { fill: var(--ink2); font-family: var(--body); }
 /* ---- Chop etish (mijozga / stanokka) ---- */
 .printhead { display: none; }
 @media print {
-  :root { --paper: #fff; --card: #fff; --ink: #000; --ink2: #333; --line: #bbb; --tape: #ddd; --tape-soft: #eee; --wood: #eee; --woodin: #ddd; --shelf: #999; --door: transparent; --door-line: #000; --leg: #aaa; --tsokol: #777; --counter: #999; --piece-l: 86%; --hatch: #ccc; --sheet: #fff; --grid: transparent; }
+  :root { --paper: #fff; --card: #fff; --ink: #000; --ink2: #333; --line: #bbb; --tape: #ddd; --tape-soft: #eee; --wood: #eee; --woodin: #ddd; --shelf: #999; --door: #fff; --door-line: #000; --leg: #aaa; --tsokol: #777; --counter: #999; --piece-l: 86%; --hatch: #ccc; --sheet: #fff; --grid: transparent; }
   body { font-size: 12px; }
   .hdr, .bar, .types, .inputs, .rtop, .tabs, dialog { display: none !important; }
   .app { display: block; padding: 0; }
@@ -254,3 +254,19 @@ svg.draw3d .shadow3 { fill: rgba(24, 32, 36, 0.12); }
 svg.draw .rodl { stroke: var(--leg); stroke-width: 5; stroke-linecap: round; }
 .check { margin: 0 0 10px; padding: 8px 12px; border-left: 4px solid var(--green, #1e6b58); background: var(--card); font-size: 14px; }
 .check.bad { border-left-color: #c0392b; }
+
+/* Yorliqlar */
+.lbls { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 8px; }
+.lbl { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; padding: 8px 10px; border: 1.5px dashed var(--ink); background: var(--card); break-inside: avoid; }
+.lbl-n { font: 700 28px/1 var(--head); min-width: 34px; text-align: center; }
+.lbl-b { display: flex; flex-direction: column; gap: 1px; font-size: 13px; min-width: 0; }
+.lbl-b b { font-size: 14px; overflow-wrap: anywhere; }
+.lbl-s { font: 700 15px var(--head); }
+.lbl-l { color: var(--ink2); font-size: 12px; }
+.eico { width: 64px; height: auto; }
+@media print {
+  body.only-labels .stage, body.only-labels .printhead, body.only-labels .pane:not([data-pane="yorliq"]) { display: none !important; }
+  body.only-labels .pane[data-pane="yorliq"] .hbtn, body.only-labels .printonly { display: none !important; }
+  body.only-labels .lbls { grid-template-columns: repeat(3, 1fr); gap: 4px; }
+  .lbl { border-color: #000; padding: 6px 8px; }
+}
