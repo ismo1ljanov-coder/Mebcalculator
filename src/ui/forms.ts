@@ -10,7 +10,7 @@ import {
   buildKrovat,
   buildDivan,
 } from "../core/templates.ts";
-import type { BuildResult, FurnitureType, KitchenModule } from "../core/templates.ts";
+import type { BuildResult, FurnitureType, KitchenModule, LegType, BedLegType } from "../core/templates.ts";
 import type { Prices } from "../core/calculator.ts";
 
 export type Field = {
@@ -19,8 +19,11 @@ export type Field = {
   unit: string;
   min: number;
   max: number;
-  step?: number;
+  /** Kichik sonlar uchun +/- tugmali maydon */
+  stepper?: boolean;
 };
+
+export type Group = { title: string; cols: 2 | 3; fields: Field[] };
 
 export const TYPE_LABELS: Record<FurnitureType, string> = {
   shkaf: "Shkaf",
@@ -30,64 +33,105 @@ export const TYPE_LABELS: Record<FurnitureType, string> = {
   divan: "Divan",
 };
 
-const T: Field = { key: "thickness", label: "LDSP qalinligi", unit: "mm", min: 10, max: 25 };
+export const THICKNESSES = [16, 18, 22] as const;
 
-export const FIELDS: Record<Exclude<FurnitureType, "oshxona">, Field[]> = {
+const W = (min: number, max: number): Field => ({ key: "width", label: "Eni", unit: "mm", min, max });
+const H = (min: number, max: number): Field => ({ key: "height", label: "Balandligi", unit: "mm", min, max });
+const D = (min: number, max: number): Field => ({ key: "depth", label: "Chuqurligi", unit: "mm", min, max });
+const N = (key: string, label: string, max: number, min = 0): Field => ({ key, label, unit: "ta", min, max, stepper: true });
+
+export const GROUPS: Record<Exclude<FurnitureType, "oshxona">, Group[]> = {
   shkaf: [
-    { key: "width", label: "Eni", unit: "mm", min: 300, max: 4000 },
-    { key: "height", label: "Balandligi", unit: "mm", min: 300, max: 2800 },
-    { key: "depth", label: "Chuqurligi", unit: "mm", min: 200, max: 800 },
-    T,
-    { key: "shelves", label: "Javonlar soni", unit: "ta", min: 0, max: 12 },
-    { key: "doors", label: "Eshiklar soni", unit: "ta", min: 0, max: 6 },
-    { key: "drawers", label: "Tortmalar soni", unit: "ta", min: 0, max: 8 },
-    { key: "plinth", label: "Oyoq balandligi", unit: "mm", min: 0, max: 200 },
+    { title: "O'lchamlar", cols: 3, fields: [W(300, 4000), H(300, 2800), D(200, 800)] },
+    { title: "Ichki tuzilma", cols: 3, fields: [N("shelves", "Javon", 12), N("doors", "Eshik", 6), N("drawers", "Tortma", 8)] },
   ],
   kupe: [
-    { key: "width", label: "Eni", unit: "mm", min: 800, max: 4500 },
-    { key: "height", label: "Balandligi", unit: "mm", min: 1500, max: 2800 },
-    { key: "depth", label: "Chuqurligi", unit: "mm", min: 300, max: 800 },
-    T,
-    { key: "sliding", label: "Kupe eshiklari soni", unit: "ta", min: 2, max: 5 },
-    { key: "shelves", label: "Javonlar soni", unit: "ta", min: 0, max: 12 },
-    { key: "drawers", label: "Tortmalar soni", unit: "ta", min: 0, max: 8 },
-    { key: "plinth", label: "Oyoq balandligi", unit: "mm", min: 0, max: 200 },
+    { title: "O'lchamlar", cols: 3, fields: [W(800, 4500), H(1500, 2800), D(300, 800)] },
+    { title: "Ichki tuzilma", cols: 3, fields: [N("sliding", "Kupe eshik", 5, 2), N("shelves", "Javon", 12), N("drawers", "Tortma", 8)] },
   ],
   krovat: [
-    { key: "mattressWidth", label: "Matras eni", unit: "mm", min: 700, max: 2200 },
-    { key: "mattressLength", label: "Matras uzunligi", unit: "mm", min: 1500, max: 2200 },
-    T,
-    { key: "railHeight", label: "Yon taxta balandligi", unit: "mm", min: 100, max: 500 },
-    { key: "headboard", label: "Bosh taxta balandligi (0 = yo'q)", unit: "mm", min: 0, max: 1200 },
-    { key: "drawers", label: "Sandiq tortmalar soni", unit: "ta", min: 0, max: 4 },
+    {
+      title: "Matras o'lchami",
+      cols: 2,
+      fields: [
+        { key: "mattressWidth", label: "Eni", unit: "mm", min: 700, max: 2200 },
+        { key: "mattressLength", label: "Uzunligi", unit: "mm", min: 1500, max: 2200 },
+      ],
+    },
+    {
+      title: "Karkas",
+      cols: 3,
+      fields: [
+        { key: "railHeight", label: "Yon taxta", unit: "mm", min: 100, max: 500 },
+        { key: "headboard", label: "Bosh taxta (0 = yo'q)", unit: "mm", min: 0, max: 1200 },
+        N("drawers", "Sandiq tortma", 4),
+      ],
+    },
   ],
   divan: [
-    { key: "length", label: "Uzunligi", unit: "mm", min: 800, max: 3500 },
-    { key: "depth", label: "Chuqurligi", unit: "mm", min: 600, max: 1200 },
-    { key: "seatHeight", label: "O'rindiq balandligi", unit: "mm", min: 300, max: 600 },
-    { key: "backHeight", label: "Suyanchiq balandligi", unit: "mm", min: 500, max: 1100 },
-    T,
+    {
+      title: "O'lchamlar",
+      cols: 2,
+      fields: [
+        { key: "length", label: "Uzunligi", unit: "mm", min: 800, max: 3500 },
+        D(600, 1200),
+        { key: "seatHeight", label: "O'rindiq balandligi", unit: "mm", min: 300, max: 600 },
+        { key: "backHeight", label: "Suyanchiq balandligi", unit: "mm", min: 500, max: 1100 },
+      ],
+    },
   ],
 };
 
-export const KITCHEN_FIELDS: Field[] = [
-  { key: "baseHeight", label: "Pastki tumba balandligi", unit: "mm", min: 600, max: 900 },
-  { key: "baseDepth", label: "Pastki tumba chuqurligi", unit: "mm", min: 400, max: 700 },
-  { key: "wallHeight", label: "Yuqori shkaf balandligi", unit: "mm", min: 300, max: 1100 },
-  { key: "wallDepth", label: "Yuqori shkaf chuqurligi", unit: "mm", min: 200, max: 450 },
-  { key: "plinth", label: "Oyoq balandligi", unit: "mm", min: 0, max: 200 },
-  T,
+export const KITCHEN_GROUPS: Group[] = [
+  {
+    title: "Tumba va shkaf o'lchamlari",
+    cols: 2,
+    fields: [
+      { key: "baseHeight", label: "Pastki tumba balandligi", unit: "mm", min: 600, max: 900 },
+      { key: "baseDepth", label: "Pastki tumba chuqurligi", unit: "mm", min: 400, max: 700 },
+      { key: "wallHeight", label: "Yuqori shkaf balandligi", unit: "mm", min: 300, max: 1100 },
+      { key: "wallDepth", label: "Yuqori shkaf chuqurligi", unit: "mm", min: 200, max: 450 },
+    ],
+  },
 ];
 
 export const MODULE_FIELDS: Field[] = [
   { key: "width", label: "Eni", unit: "mm", min: 200, max: 1200 },
-  { key: "doors", label: "Eshik", unit: "ta", min: 0, max: 3 },
-  { key: "drawers", label: "Tortma", unit: "ta", min: 0, max: 5 },
-  { key: "shelves", label: "Javon", unit: "ta", min: 0, max: 5 },
+  N("doors", "Eshik", 3),
+  N("drawers", "Tortma", 5),
+  N("shelves", "Javon", 5),
 ];
+
+/** Tez tanlash uchun odatiy o'lchamlar */
+export const WIDTH_PRESETS: Record<"shkaf" | "kupe", number[]> = {
+  shkaf: [600, 800, 1000, 1200, 1500, 1800],
+  kupe: [1500, 1800, 2000, 2400, 3000],
+};
+export const MATTRESS_PRESETS: [number, number][] = [
+  [900, 2000],
+  [1200, 2000],
+  [1400, 2000],
+  [1600, 2000],
+  [1800, 2000],
+];
+
+export const FRAME_LEGS: { id: LegType; label: string; hint: string }[] = [
+  { id: "yoq", label: "Oyoqsiz", hint: "Polga tegib turadi" },
+  { id: "tsokol", label: "Tsokol", hint: "Old planka + rostlanadigan oyoq" },
+  { id: "nikel", label: "Nikel oyoq", hint: "Ochiq metall oyoq" },
+];
+export const BED_LEGS: { id: BedLegType; label: string }[] = [
+  { id: "yogoch", label: "Yog'och" },
+  { id: "nikel", label: "Nikel" },
+  { id: "plastik", label: "Plastik" },
+];
+/** Oyoq turini almashtirganda tavsiya qilinadigan balandlik, mm */
+export const SUGGESTED_LEG_HEIGHT: Record<LegType, number> = { yoq: 0, tsokol: 100, nikel: 150 };
 
 export type AppState = {
   type: FurnitureType;
+  /** Loyiha yoki mijoz nomi (chop etishda ko'rinadi) */
+  title: string;
   params: {
     shkaf: typeof SHKAF_DEFAULT;
     kupe: typeof KUPE_DEFAULT;
@@ -102,9 +146,10 @@ export type AppState = {
 export function defaultState(): AppState {
   return {
     type: "shkaf",
+    title: "",
     params: {
-      shkaf: { ...SHKAF_DEFAULT },
-      kupe: { ...KUPE_DEFAULT },
+      shkaf: { ...SHKAF_DEFAULT, legType: "tsokol", plinth: 100 },
+      kupe: { ...KUPE_DEFAULT, legType: "tsokol", plinth: 100 },
       oshxona: { ...OSHXONA_DEFAULT, modules: OSHXONA_DEFAULT.modules.map((m) => ({ ...m })) },
       krovat: { ...KROVAT_DEFAULT },
       divan: { ...DIVAN_DEFAULT },
@@ -112,7 +157,7 @@ export function defaultState(): AppState {
     sheet: { length: 2750, width: 1830, kerf: 4, trim: 10 },
     // Narxlar ataylab 0: bozor narxlarini taxmin qilmaymiz, usta o'zinikini kiritadi.
     prices: {
-      sheetByThickness: { 16: 0, 18: 0 },
+      sheetByThickness: { 16: 0, 18: 0, 22: 0 },
       edgePerMeter: 0,
       backPanelSheet: 0,
       labor: { mode: "percent", value: 0 },
@@ -142,3 +187,8 @@ export function buildFor(state: AppState): BuildResult {
 }
 
 export const NEW_MODULE: KitchenModule = { kind: "past", width: 600, doors: 1, drawers: 0, shelves: 1 };
+
+/** Joriy turdagi parametrlarni umumiy ko'rinishda qaytaradi (forma va saqlash uchun) */
+export function currentParams(state: AppState): Record<string, number | string> {
+  return state.params[state.type] as unknown as Record<string, number | string>;
+}

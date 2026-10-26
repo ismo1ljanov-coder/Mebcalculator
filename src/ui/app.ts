@@ -1,179 +1,394 @@
 import { calculate } from "../core/calculator.ts";
-import type { FurnitureType } from "../core/templates.ts";
+import type { CalcResult } from "../core/calculator.ts";
+import type { BuildResult, FurnitureType } from "../core/templates.ts";
 import {
-  FIELDS,
-  KITCHEN_FIELDS,
+  BED_LEGS,
+  FRAME_LEGS,
+  GROUPS,
+  KITCHEN_GROUPS,
+  MATTRESS_PRESETS,
   MODULE_FIELDS,
   NEW_MODULE,
+  SUGGESTED_LEG_HEIGHT,
+  THICKNESSES,
   TYPE_LABELS,
+  WIDTH_PRESETS,
   buildFor,
   clamp,
   defaultState,
 } from "./forms.ts";
-import type { AppState, Field } from "./forms.ts";
+import type { AppState, Field, Group } from "./forms.ts";
 import {
   adviceSection,
+  barSummary,
+  cutListText,
   cutSection,
-  elevationSVG,
+  describeState,
+  drawingSVG,
   esc,
   fmt,
   fmt1,
   furnitureSection,
   materialSection,
   partsTable,
-  summaryCards,
+  statsStrip,
   typeTitle,
 } from "./render.ts";
 
-const KEY = "mebcalc.v1";
-const ICONS: Record<FurnitureType, string> = { shkaf: "🚪", kupe: "↔️", oshxona: "🍳", krovat: "🛏️", divan: "🛋️" };
+const KEY = "mebcalc.v2";
+const PKEY = "mebcalc.projects.v2";
 const TABS = [
-  ["chizma", "Chizma"],
   ["raskroy", "Raskroy"],
-  ["material", "Material"],
-  ["kesim", "Kesim"],
+  ["kesim", "Kesim ro'yxati"],
+  ["material", "Material va narx"],
   ["furnitura", "Furnitura"],
   ["maslahat", "Maslahat"],
 ] as const;
+const TYPES = Object.keys(TYPE_LABELS) as FurnitureType[];
 
-let state: AppState = load();
-let view: "input" | "result" = "input";
-let tab = "chizma";
+// ---------------------------------------------------------------- Saqlash
 
-function load(): AppState {
+type Project = { id: string; name: string; savedAt: string; snapshot: AppState };
+
+/** Saqlangan yoki eski ma'lumotni xavfsiz holatga keltiradi: noma'lum kalitlar tashlanadi, sonlar chegaralanadi */
+export function normalizeState(raw: unknown): AppState {
   const d = defaultState();
-  try {
-    const raw = localStorage.getItem(KEY);
-    if (!raw) return d;
-    const s = JSON.parse(raw);
-    // Eski/yaroqsiz saqlangan ma'lumotdan himoya: faqat tanish kalitlarni olamiz
-    const merged: AppState = {
-      type: s.type in TYPE_LABELS ? s.type : d.type,
-      params: {
-        shkaf: { ...d.params.shkaf, ...s.params?.shkaf },
-        kupe: { ...d.params.kupe, ...s.params?.kupe },
-        oshxona: {
-          ...d.params.oshxona,
-          ...s.params?.oshxona,
-          modules: Array.isArray(s.params?.oshxona?.modules) ? s.params.oshxona.modules : d.params.oshxona.modules,
-        },
-        krovat: { ...d.params.krovat, ...s.params?.krovat },
-        divan: { ...d.params.divan, ...s.params?.divan },
+  const s = (raw && typeof raw === "object" ? raw : {}) as Record<string, any>;
+  const out: AppState = {
+    type: TYPES.includes(s.type) ? s.type : d.type,
+    title: typeof s.title === "string" ? s.title.slice(0, 60) : "",
+    params: {
+      shkaf: { ...d.params.shkaf, ...pick(s.params?.shkaf, d.params.shkaf) },
+      kupe: { ...d.params.kupe, ...pick(s.params?.kupe, d.params.kupe) },
+      oshxona: {
+        ...d.params.oshxona,
+        ...pick(s.params?.oshxona, d.params.oshxona),
+        modules: Array.isArray(s.params?.oshxona?.modules)
+          ? s.params.oshxona.modules.slice(0, 30).map((m: any) => ({ ...NEW_MODULE, ...pick(m, NEW_MODULE) }))
+          : d.params.oshxona.modules,
       },
-      sheet: { ...d.sheet, ...s.sheet },
-      prices: {
-        ...d.prices,
-        ...s.prices,
-        sheetByThickness: { ...d.prices.sheetByThickness, ...s.prices?.sheetByThickness },
-        labor: s.prices?.labor?.mode ? s.prices.labor : d.prices.labor,
-      },
-    };
-    return merged;
-  } catch {
-    return d;
-  }
+      krovat: { ...d.params.krovat, ...pick(s.params?.krovat, d.params.krovat) },
+      divan: { ...d.params.divan, ...pick(s.params?.divan, d.params.divan) },
+    },
+    sheet: { ...d.sheet, ...pick(s.sheet, d.sheet) },
+    prices: {
+      ...d.prices,
+      ...pick(s.prices, d.prices),
+      sheetByThickness: { ...d.prices.sheetByThickness, ...(typeof s.prices?.sheetByThickness === "object" ? s.prices.sheetByThickness : {}) },
+      labor: s.prices?.labor?.mode === "percent" || s.prices?.labor?.mode === "fixed" ? s.prices.labor : d.prices.labor,
+    },
+  };
+  sanitize(out);
+  return out;
 }
 
-function save() {
+/** Faqat standart obyektda bor kalitlarni va bir xil tipdagilarni oladi */
+function pick(src: any, tpl: Record<string, any>): Record<string, any> {
+  const o: Record<string, any> = {};
+  if (!src || typeof src !== "object") return o;
+  for (const k of Object.keys(tpl)) {
+    if (k === "modules") continue;
+    if (typeof src[k] === typeof tpl[k] && (typeof tpl[k] !== "number" || Number.isFinite(src[k]))) o[k] = src[k];
+  }
+  return o;
+}
+
+function sanitize(st: AppState) {
+  const lim = (v: number, min: number, max: number) => clamp(v, { min, max });
+  for (const t of ["shkaf", "kupe", "krovat", "divan"] as const) {
+    const p = st.params[t] as unknown as Record<string, number>;
+    const groups: Group[] = GROUPS[t];
+    for (const g of groups) for (const f of g.fields) p[f.key] = lim(p[f.key], f.min, f.max);
+  }
+  for (const g of KITCHEN_GROUPS) for (const f of g.fields) (st.params.oshxona as any)[f.key] = lim((st.params.oshxona as any)[f.key], f.min, f.max);
+  for (const m of st.params.oshxona.modules as any[]) {
+    m.kind = m.kind === "yuqori" ? "yuqori" : "past";
+    for (const f of MODULE_FIELDS) m[f.key] = lim(m[f.key], f.min, f.max);
+  }
+  const th = (v: number) => ((THICKNESSES as readonly number[]).includes(v) ? v : 16);
+  for (const t of TYPES) (st.params[t] as any).thickness = th((st.params[t] as any).thickness);
+  for (const t of ["shkaf", "kupe", "oshxona"] as const) {
+    const p = st.params[t] as any;
+    p.legType = ["yoq", "tsokol", "nikel"].includes(p.legType) ? p.legType : "yoq";
+    p.plinth = lim(p.plinth, 0, 250);
+  }
+  for (const t of ["krovat", "divan"] as const) {
+    const p = st.params[t] as any;
+    p.legType = ["yogoch", "nikel", "plastik"].includes(p.legType) ? p.legType : "yogoch";
+    p.legHeight = lim(p.legHeight, 50, 400);
+  }
+  st.sheet.length = lim(st.sheet.length, 1000, 4000);
+  st.sheet.width = lim(st.sheet.width, 800, 2500);
+  st.sheet.kerf = lim(st.sheet.kerf, 0, 10);
+  st.sheet.trim = lim(st.sheet.trim, 0, 30);
+}
+
+function loadState(): AppState {
+  try {
+    const raw = localStorage.getItem(KEY);
+    return raw ? normalizeState(JSON.parse(raw)) : defaultState();
+  } catch {
+    return defaultState();
+  }
+}
+function saveState() {
   try {
     localStorage.setItem(KEY, JSON.stringify(state));
   } catch {
-    /* xotira to'lgan yoki taqiqlangan — ilova baribir ishlaydi */
+    /* xotira to'lgan yoki taqiqlangan: ilova baribir ishlaydi */
+  }
+}
+function loadProjects(): Project[] {
+  try {
+    const a = JSON.parse(localStorage.getItem(PKEY) ?? "[]");
+    return Array.isArray(a) ? a.filter((p) => p && typeof p.id === "string" && typeof p.name === "string") : [];
+  } catch {
+    return [];
+  }
+}
+function saveProjects(list: Project[]) {
+  try {
+    localStorage.setItem(PKEY, JSON.stringify(list.slice(0, 40)));
+  } catch {
+    /* ruxsat yo'q */
   }
 }
 
-const root = document.getElementById("app")!;
+// ---------------------------------------------------------------- Holat
 
-// ---------------------------------------------------------------- Kiritish
+let state: AppState = typeof document !== "undefined" ? loadState() : defaultState();
+let tab = "raskroy";
+let last: { build: BuildResult; calc: CalcResult } | null = null;
 
-function numberInput(f: Field, value: number, attrs: string): string {
-  return `<label class="fld"><span>${esc(f.label)} <em>(${esc(f.unit)})</em></span><input type="number" inputmode="numeric" min="${f.min}" max="${f.max}" value="${value}" ${attrs}></label>`;
+const $ = (id: string) => document.getElementById(id)!;
+
+// ---------------------------------------------------------------- Kiritish formasi
+
+function fieldHTML(f: Field, value: number, attrs: string): string {
+  const input = `<input type="number" inputmode="numeric" min="${f.min}" max="${f.max}" value="${value}" ${attrs} aria-label="${esc(f.label)}">`;
+  if (f.stepper) {
+    return `<label class="fld"><span>${esc(f.label)}</span><div class="step"><button type="button" data-step="-1" aria-label="Kamaytirish">−</button>${input}<button type="button" data-step="1" aria-label="Ko'paytirish">+</button></div></label>`;
+  }
+  return `<label class="fld"><span>${esc(f.label)} <i>${esc(f.unit)}</i></span>${input}</label>`;
 }
 
-function inputView(): string {
-  const tiles = (Object.keys(TYPE_LABELS) as FurnitureType[])
-    .map((t) => `<button class="tile ${t === state.type ? "on" : ""}" data-type="${t}"><span class="ico">${ICONS[t]}</span>${TYPE_LABELS[t]}</button>`)
-    .join("");
+function groupHTML(g: Group, values: Record<string, number>, scope = "params"): string {
+  return `<section class="sec"><h2>${esc(g.title)}</h2><div class="row c${g.cols}">${g.fields
+    .map((f) => fieldHTML(f, values[f.key], `data-scope="${scope}" data-key="${f.key}"`))
+    .join("")}</div>`;
+}
 
-  let form = "";
-  if (state.type === "oshxona") {
+function legsHTML(): string {
+  const t = state.type;
+  if (t === "krovat" || t === "divan") {
+    const p = state.params[t];
+    return `<section class="sec"><h2>Oyoq</h2><div class="seg">${BED_LEGS.map(
+      (l) => `<button type="button" data-bleg="${l.id}" class="${p.legType === l.id ? "on" : ""}">${l.label}</button>`,
+    ).join("")}</div><div class="row" style="margin-top:10px">${fieldHTML(
+      { key: "legHeight", label: "Oyoq balandligi", unit: "mm", min: 50, max: 400 },
+      p.legHeight,
+      `data-scope="params" data-key="legHeight"`,
+    )}</div></section>`;
+  }
+  const p = state.params[t] as { legType: "yoq" | "tsokol" | "nikel"; plinth: number };
+  const cur = FRAME_LEGS.find((l) => l.id === p.legType)!;
+  return `<section class="sec"><h2>Oyoq</h2><div class="seg">${FRAME_LEGS.map(
+    (l) => `<button type="button" data-leg="${l.id}" class="${p.legType === l.id ? "on" : ""}">${l.label}</button>`,
+  ).join("")}</div><p class="hint">${esc(cur.hint)}${p.legType === "yoq" ? "" : ". Oyoq balandligi umumiy balandlikka kiradi."}</p>${
+    p.legType === "yoq"
+      ? ""
+      : `<div class="row" style="margin-top:10px">${fieldHTML({ key: "plinth", label: p.legType === "tsokol" ? "Tsokol balandligi" : "Oyoq balandligi", unit: "mm", min: 30, max: 250 }, p.plinth, `data-scope="params" data-key="plinth"`)}</div>`
+  }</section>`;
+}
+
+function inputsHTML(): string {
+  const t = state.type;
+  const h: string[] = [];
+  h.push(
+    `<section class="sec"><label class="fld"><span>Loyiha yoki mijoz nomi</span><input type="text" data-scope="title" value="${esc(state.title)}" placeholder="Masalan: Aziz aka, yotoqxona shkafi" maxlength="60"></label></section>`,
+  );
+
+  if (t === "oshxona") {
     const k = state.params.oshxona as unknown as Record<string, number>;
-    form += `<section class="card"><h2>Oshxona o'lchamlari</h2><div class="grid">${KITCHEN_FIELDS.map((f) => numberInput(f, k[f.key], `data-scope="params" data-key="${f.key}"`)).join("")}</div></section>`;
-    form += `<section class="card"><h2>Modullar</h2>${state.params.oshxona.modules
-      .map(
-        (m, i) => `<div class="mod"><div class="modhead"><select data-scope="mod" data-i="${i}" data-key="kind"><option value="past" ${m.kind === "past" ? "selected" : ""}>Pastki tumba</option><option value="yuqori" ${m.kind === "yuqori" ? "selected" : ""}>Yuqori shkaf</option></select><button class="ghost" data-del="${i}" aria-label="O'chirish">✕</button></div><div class="grid4">${MODULE_FIELDS.map((f) => numberInput(f, (m as unknown as Record<string, number>)[f.key], `data-scope="mod" data-i="${i}" data-key="${f.key}"`)).join("")}</div></div>`,
-      )
-      .join("")}<button class="btn2" id="addmod">+ Modul qo'shish</button></section>`;
+    for (const g of KITCHEN_GROUPS) h.push(groupHTML(g, k) + "</section>");
+    h.push(
+      `<section class="sec"><h2>Modullar</h2>${state.params.oshxona.modules
+        .map(
+          (m, i) => `<div class="mod"><div class="modhead"><select data-scope="mod" data-i="${i}" data-key="kind" aria-label="Modul turi"><option value="past" ${m.kind === "past" ? "selected" : ""}>Pastki tumba</option><option value="yuqori" ${m.kind === "yuqori" ? "selected" : ""}>Yuqori shkaf</option></select><button type="button" class="iconbtn" data-del="${i}" aria-label="Modulni o'chirish">✕</button></div><div class="row c4">${MODULE_FIELDS.map((f) =>
+            fieldHTML(f, (m as unknown as Record<string, number>)[f.key], `data-scope="mod" data-i="${i}" data-key="${f.key}"`),
+          ).join("")}</div></div>`,
+        )
+        .join("")}<button type="button" class="btn2" id="addmod">+ Modul qo'shish</button></section>`,
+    );
   } else {
-    const p = state.params[state.type] as unknown as Record<string, number>;
-    const fields = FIELDS[state.type];
-    form += `<section class="card"><h2>${esc(typeTitle(state.type))} — o'lchamlar</h2><div class="grid">${fields.map((f) => numberInput(f, p[f.key], `data-scope="params" data-key="${f.key}"`)).join("")}</div></section>`;
+    const p = state.params[t] as unknown as Record<string, number>;
+    GROUPS[t].forEach((g, i) => {
+      let html = groupHTML(g, p);
+      if (i === 0 && (t === "shkaf" || t === "kupe")) {
+        html += `<div class="chips">${WIDTH_PRESETS[t]
+          .map((w) => `<button type="button" class="chip ${p.width === w ? "on" : ""}" data-pw="${w}">${w}</button>`)
+          .join("")}</div>`;
+      }
+      if (i === 0 && t === "krovat") {
+        html += `<div class="chips">${MATTRESS_PRESETS.map(
+          ([w, l]) => `<button type="button" class="chip ${p.mattressWidth === w && p.mattressLength === l ? "on" : ""}" data-pm="${w}x${l}">${w}×${l}</button>`,
+        ).join("")}</div>`;
+      }
+      h.push(html + "</section>");
+    });
   }
+
+  h.push(legsHTML());
+
+  const th = (state.params[t] as unknown as { thickness: number }).thickness;
+  h.push(
+    `<section class="sec"><h2>LDSP qalinligi</h2><div class="seg">${THICKNESSES.map((v) => `<button type="button" data-th="${v}" class="${th === v ? "on" : ""}">${v} mm</button>`).join("")}</div></section>`,
+  );
 
   const s = state.sheet;
   const pr = state.prices;
-  const thicknesses = [16, 18];
-  form += `<details class="card"><summary><h2>Material va narxlar</h2></summary>
-<div class="grid">
-${numberInput({ key: "length", label: "List uzunligi", unit: "mm", min: 1000, max: 4000 }, s.length, `data-scope="sheet" data-key="length"`)}
-${numberInput({ key: "width", label: "List eni", unit: "mm", min: 800, max: 2500 }, s.width, `data-scope="sheet" data-key="width"`)}
-${numberInput({ key: "kerf", label: "Arra qalinligi (kerf)", unit: "mm", min: 0, max: 10 }, s.kerf, `data-scope="sheet" data-key="kerf"`)}
-${numberInput({ key: "trim", label: "List chetidan kesish", unit: "mm", min: 0, max: 30 }, s.trim, `data-scope="sheet" data-key="trim"`)}
-${thicknesses.map((t) => numberInput({ key: String(t), label: `LDSP ${t} mm — 1 list narxi`, unit: "so'm", min: 0, max: 100000000 }, pr.sheetByThickness[t] ?? 0, `data-scope="priceT" data-key="${t}"`)).join("")}
-${numberInput({ key: "edgePerMeter", label: "Kant — 1 metr narxi", unit: "so'm", min: 0, max: 1000000 }, pr.edgePerMeter, `data-scope="price" data-key="edgePerMeter"`)}
-${numberInput({ key: "backPanelSheet", label: "DVP — 1 list narxi", unit: "so'm", min: 0, max: 100000000 }, pr.backPanelSheet, `data-scope="price" data-key="backPanelSheet"`)}
-${numberInput({ key: "labor", label: "Usta ish haqi (materialdan)", unit: "%", min: 0, max: 300 }, pr.labor.value, `data-scope="labor"`)}
-${numberInput({ key: "marginPercent", label: "Foyda", unit: "%", min: 0, max: 200 }, pr.marginPercent, `data-scope="price" data-key="marginPercent"`)}
+  const num = (key: string, label: string, unit: string, min: number, max: number, v: number, attrs: string) =>
+    fieldHTML({ key, label, unit, min, max }, v, attrs);
+  h.push(`<details class="sec"><summary>Material va narxlar</summary>
+<div class="row c2">
+${num("length", "List uzunligi", "mm", 1000, 4000, s.length, `data-scope="sheet" data-key="length"`)}
+${num("width", "List eni", "mm", 800, 2500, s.width, `data-scope="sheet" data-key="width"`)}
+${num("kerf", "Arra qalinligi", "mm", 0, 10, s.kerf, `data-scope="sheet" data-key="kerf"`)}
+${num("trim", "List chetidan kesish", "mm", 0, 30, s.trim, `data-scope="sheet" data-key="trim"`)}
+${THICKNESSES.map((v) => num(String(v), `LDSP ${v} mm, 1 list`, "so'm", 0, 100000000, pr.sheetByThickness[v] ?? 0, `data-scope="priceT" data-key="${v}"`)).join("")}
+${num("edgePerMeter", "Kant, 1 metr", "so'm", 0, 1000000, pr.edgePerMeter, `data-scope="price" data-key="edgePerMeter"`)}
+${num("backPanelSheet", "DVP, 1 list", "so'm", 0, 100000000, pr.backPanelSheet, `data-scope="price" data-key="backPanelSheet"`)}
+${num("labor", "Usta ish haqi (materialdan)", "%", 0, 300, pr.labor.mode === "percent" ? pr.labor.value : 0, `data-scope="labor"`)}
+${num("marginPercent", "Foyda", "%", 0, 200, pr.marginPercent, `data-scope="price" data-key="marginPercent"`)}
 </div>
-<p class="muted">Narxlar telefoningizda saqlanadi. Standart bo'yicha 0 — bozor narxini o'zingiz kiriting.</p></details>`;
-
-  return `<div class="tiles">${tiles}</div>${form}<button class="cta" id="calc">Hisoblash</button>`;
+<p class="hint">Narxlar telefoningizda saqlanadi. Boshlang'ich qiymat 0: bozor narxini o'zingiz kiriting.</p></details>`);
+  return h.join("");
 }
 
-// ---------------------------------------------------------------- Natija
+// ---------------------------------------------------------------- Yangilash
 
-function resultView(): string {
+function today(): string {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()}`;
+}
+
+function update() {
   const build = buildFor(state);
-  const sheet = state.sheet;
-  const calc = calculate(build, sheet, state.prices);
-  const dims = { length: sheet.length, width: sheet.width, trim: sheet.trim };
+  const calc = calculate(build, state.sheet, state.prices);
+  last = { build, calc };
+  const dims = { length: state.sheet.length, width: state.sheet.width, trim: state.sheet.trim };
+
+  $("stagehead").innerHTML = `<h1>${esc(typeTitle(state.type))}</h1><span>${esc(describeState(state))}</span>`;
+  $("draw").innerHTML = drawingSVG(state);
+  $("stats").innerHTML = statsStrip(calc);
+  $("price").innerHTML =
+    calc.cost.total > 0
+      ? `<div class="pricebar"><span>Taxminiy narx</span><b>${fmt(calc.cost.total)} so'm</b></div>`
+      : `<div class="pricehint">Narxni ko'rish uchun "Material va narxlar" bo'limiga list va kant narxini kiriting.</div>`;
 
   const panes: Record<string, string> = {
-    chizma: `<div class="drawwrap">${elevationSVG(state)}</div><p class="muted">Sxematik chizma. Aniq detallar "Kesim" va "Raskroy" bo'limlarida.</p>`,
     raskroy: cutSection(calc, dims, build.parts),
-    material: materialSection(calc, sheet, state),
-    kesim: partsTable(build.parts),
+    kesim: `<button type="button" class="hbtn" id="copycut" style="margin-bottom:10px">Ro'yxatni nusxalash</button>${partsTable(build.parts)}`,
+    material: materialSection(calc, state.sheet, state),
     furnitura: furnitureSection(build),
     maslahat: adviceSection(calc, build),
   };
+  $("panes").innerHTML = TABS.map(
+    ([id, label]) => `<section class="pane ${id === tab ? "on" : ""}" data-pane="${id}"><h2 class="printonly">${label}</h2>${panes[id]}</section>`,
+  ).join("");
 
-  const dimText = describe();
-  const tabs = TABS.map(([id, label]) => `<button class="tab ${id === tab ? "on" : ""}" data-tab="${id}">${label}</button>`).join("");
-  const panesHtml = TABS.map(([id, label]) => `<section class="pane ${id === tab ? "on" : ""}" data-pane="${id}"><h2 class="printonly">${label}</h2>${panes[id]}</section>`).join("");
+  const b = barSummary(calc);
+  $("bar").innerHTML = `<div class="bi"><b>${b.sheets}</b><small>list</small></div><div class="bi"><b>${fmt1(b.waste)}%</b><small>qoldiq</small></div>${
+    b.cost > 0 ? `<div class="bi cost"><b>${fmt(b.cost)}</b><small>so'm</small></div>` : ""
+  }<button type="button" id="gores">Natija</button>`;
 
-  return `<div class="top"><button class="ghost" id="back">← Orqaga</button><div><h1>${esc(typeTitle(state.type))}</h1><div class="muted mono">${esc(dimText)}</div></div></div>
-<div class="actions"><button class="btn2" id="share">Ulashish</button><button class="btn2" id="print">PDF / Chop etish</button></div>
-<div class="stats">${summaryCards(calc, sheet.length * sheet.width)}</div>
-${calc.cost.total > 0 ? `<div class="card total"><span>Taxminiy narx</span><b>${fmt(calc.cost.total)} so'm</b></div>` : ""}
-<nav class="tabs">${tabs}</nav>${panesHtml}`;
+  $("printhead").innerHTML = `<h1>${esc(state.title || typeTitle(state.type))}</h1><div>${esc(typeTitle(state.type))}, ${esc(describeState(state))}. Sana: ${today()}</div>`;
 }
 
-function describe(): string {
-  if (state.type === "oshxona") {
-    const m = state.params.oshxona.modules;
-    const len = m.filter((x) => x.kind === "past").reduce((s, x) => s + x.width, 0);
-    return `${m.length} modul · pastki qator ${len} mm`;
+let scheduled = false;
+function schedule() {
+  if (scheduled) return;
+  scheduled = true;
+  requestAnimationFrame(() => {
+    scheduled = false;
+    update();
+  });
+}
+
+function renderTypes() {
+  $("types").innerHTML = TYPES.map((t) => `<button type="button" class="type ${t === state.type ? "on" : ""}" data-type="${t}">${TYPE_LABELS[t]}</button>`).join("");
+}
+function renderInputs() {
+  $("inputs").innerHTML = inputsHTML();
+}
+function renderTabs() {
+  $("tabs").innerHTML = TABS.map(([id, label]) => `<button type="button" class="tab ${id === tab ? "on" : ""}" data-tab="${id}">${label}</button>`).join("");
+}
+function rerenderAll() {
+  renderTypes();
+  renderInputs();
+  update();
+}
+
+// ---------------------------------------------------------------- Kiritishni qayta ishlash
+
+function applyInput(el: HTMLInputElement | HTMLSelectElement, commit: boolean) {
+  const scope = el.dataset.scope;
+  if (!scope) return;
+  const key = el.dataset.key ?? "";
+
+  if (scope === "title") {
+    state.title = el.value.slice(0, 60);
+    saveState();
+    schedule();
+    return;
   }
-  const p = state.params[state.type] as unknown as Record<string, number>;
-  if (state.type === "krovat") return `matras ${p.mattressWidth} × ${p.mattressLength} mm`;
-  if (state.type === "divan") return `${p.length} × ${p.depth} × ${p.backHeight} mm`;
-  return `${p.width} × ${p.height} × ${p.depth} mm`;
+  if (scope === "mod" && key === "kind") {
+    const m = state.params.oshxona.modules[Number(el.dataset.i)];
+    if (m) m.kind = el.value === "yuqori" ? "yuqori" : "past";
+    saveState();
+    schedule();
+    return;
+  }
+
+  // Raqamli maydon
+  const inp = el as HTMLInputElement;
+  const raw = Number(inp.value);
+  const min = Number(inp.min);
+  const max = Number(inp.max);
+  if (inp.value === "" || !Number.isFinite(raw)) {
+    if (commit) inp.value = String(clamp(raw, { min, max }));
+    else return;
+  }
+  // Yozish davomida (masalan "1" -> "12" -> "1200") minimumdan kichik oraliq qiymatlar e'tiborga olinmaydi
+  if (!commit && raw < min) return;
+  const v = clamp(raw, { min, max });
+  if (commit) inp.value = String(v);
+
+  if (scope === "params") (state.params[state.type] as unknown as Record<string, number>)[key] = v;
+  else if (scope === "mod") {
+    const m = state.params.oshxona.modules[Number(el.dataset.i)] as unknown as Record<string, number> | undefined;
+    if (m) m[key] = v;
+  } else if (scope === "sheet") (state.sheet as Record<string, number>)[key] = v;
+  else if (scope === "priceT") state.prices.sheetByThickness[Number(key)] = v;
+  else if (scope === "price") (state.prices as unknown as Record<string, number>)[key] = v;
+  else if (scope === "labor") state.prices.labor = { mode: "percent", value: v };
+
+  saveState();
+  schedule();
+}
+
+function toast(btn: HTMLElement, text: string) {
+  const old = btn.textContent;
+  btn.textContent = text;
+  setTimeout(() => (btn.textContent = old), 1600);
 }
 
 function shareText(): string {
-  const build = buildFor(state);
-  const calc = calculate(build, state.sheet, state.prices);
-  const lines = [`${typeTitle(state.type)} — ${describe()}`];
+  if (!last) return "";
+  const { calc } = last;
+  const lines = [state.title || typeTitle(state.type), `${typeTitle(state.type)}, ${describeState(state)}`];
   for (const g of calc.groups) lines.push(`LDSP ${g.thickness} mm: ${g.pack.sheets.length} ta list (qoldiq ${fmt1(g.pack.waste)}%)`);
   lines.push(`Kant: ${Math.ceil(calc.edge.withWaste)} m`);
   if (calc.backPanel.sheets) lines.push(`DVP: ${calc.backPanel.sheets} ta list`);
@@ -181,97 +396,142 @@ function shareText(): string {
   return lines.join("\n");
 }
 
-// ---------------------------------------------------------------- Hodisalar
-
-function render() {
-  root.innerHTML = view === "input" ? inputView() : resultView();
-  window.scrollTo(0, 0);
-}
-
-function readNumber(el: HTMLInputElement, f: Pick<Field, "min" | "max">): number {
-  return clamp(Number(el.value), f);
-}
-
-root.addEventListener("click", (e) => {
+function onClick(e: Event) {
   const t = (e.target as HTMLElement).closest("button") as HTMLButtonElement | null;
   if (!t) return;
-  if (t.dataset.type) {
-    state.type = t.dataset.type as FurnitureType;
-    save();
-    render();
-  } else if (t.id === "calc") {
-    view = "result";
-    tab = "chizma";
-    render();
-  } else if (t.id === "back") {
-    view = "input";
-    render();
-  } else if (t.dataset.tab) {
-    tab = t.dataset.tab;
-    root.querySelectorAll<HTMLElement>(".tab").forEach((b) => b.classList.toggle("on", b.dataset.tab === tab));
-    root.querySelectorAll<HTMLElement>(".pane").forEach((p) => p.classList.toggle("on", p.dataset.pane === tab));
+  const d = t.dataset;
+
+  if (d.type) {
+    state.type = d.type as FurnitureType;
+    saveState();
+    rerenderAll();
+  } else if (d.step) {
+    const inp = t.parentElement!.querySelector("input")!;
+    const cur = Number(inp.value) || 0;
+    inp.value = String(clamp(cur + Number(d.step), { min: Number(inp.min), max: Number(inp.max) }));
+    applyInput(inp, true);
+  } else if (d.leg) {
+    const p = state.params[state.type as "shkaf" | "kupe" | "oshxona"];
+    p.legType = d.leg as typeof p.legType;
+    // Oyoqsiz tanlansa balandlik saqlanib qoladi (hisobga olinmaydi). Boshqa turga o'tganda, agar
+    // balandlik tavsiya qilingan qiymatlardan biri bo'lsa (0, 100, 150), yangi turning tavsiyasiga almashtiriladi;
+    // ustaning o'z qiymati (masalan 120) o'zgarmaydi.
+    if (p.legType !== "yoq" && Object.values(SUGGESTED_LEG_HEIGHT).includes(p.plinth)) p.plinth = SUGGESTED_LEG_HEIGHT[p.legType];
+    saveState();
+    renderInputs();
+    schedule();
+  } else if (d.bleg) {
+    const p = state.params[state.type as "krovat" | "divan"];
+    p.legType = d.bleg as typeof p.legType;
+    saveState();
+    renderInputs();
+    schedule();
+  } else if (d.th) {
+    (state.params[state.type] as unknown as { thickness: number }).thickness = Number(d.th);
+    saveState();
+    renderInputs();
+    schedule();
+  } else if (d.pw) {
+    (state.params[state.type as "shkaf" | "kupe"] as { width: number }).width = Number(d.pw);
+    saveState();
+    renderInputs();
+    schedule();
+  } else if (d.pm) {
+    const [w, l] = d.pm.split("x").map(Number);
+    state.params.krovat.mattressWidth = w;
+    state.params.krovat.mattressLength = l;
+    saveState();
+    renderInputs();
+    schedule();
+  } else if (d.tab) {
+    tab = d.tab;
+    document.querySelectorAll<HTMLElement>(".tab").forEach((b) => b.classList.toggle("on", b.dataset.tab === tab));
+    document.querySelectorAll<HTMLElement>(".pane").forEach((p) => p.classList.toggle("on", p.dataset.pane === tab));
   } else if (t.id === "addmod") {
     state.params.oshxona.modules.push({ ...NEW_MODULE });
-    save();
-    render();
-  } else if (t.dataset.del !== undefined) {
-    state.params.oshxona.modules.splice(Number(t.dataset.del), 1);
-    save();
-    render();
+    saveState();
+    renderInputs();
+    schedule();
+  } else if (d.del !== undefined) {
+    state.params.oshxona.modules.splice(Number(d.del), 1);
+    saveState();
+    renderInputs();
+    schedule();
+  } else if (t.id === "gores") {
+    $("results").scrollIntoView({ behavior: "smooth", block: "start" });
   } else if (t.id === "print") {
     window.print();
   } else if (t.id === "share") {
     const text = shareText();
-    if (navigator.share) navigator.share({ text }).catch(() => {});
-    else navigator.clipboard?.writeText(text).then(() => (t.textContent = "Nusxalandi ✓")).catch(() => {});
-  }
-});
-
-root.addEventListener("change", (e) => {
-  const el = e.target as HTMLInputElement | HTMLSelectElement;
-  const scope = el.dataset.scope;
-  if (!scope) return;
-  const key = el.dataset.key ?? "";
-
-  if (scope === "mod") {
-    const m = state.params.oshxona.modules[Number(el.dataset.i)] as unknown as Record<string, unknown>;
-    if (!m) return;
-    if (key === "kind") m[key] = el.value === "yuqori" ? "yuqori" : "past";
-    else {
-      const f = MODULE_FIELDS.find((x) => x.key === key);
-      if (f) {
-        m[key] = readNumber(el as HTMLInputElement, f);
-        (el as HTMLInputElement).value = String(m[key]);
-      }
+    if (navigator.share) navigator.share({ title: state.title || typeTitle(state.type), text }).catch(() => {});
+    else navigator.clipboard?.writeText(text).then(() => toast(t, "Nusxalandi")).catch(() => {});
+  } else if (t.id === "copycut" && last) {
+    navigator.clipboard?.writeText(cutListText(last.build.parts, state.title)).then(() => toast(t, "Nusxalandi")).catch(() => toast(t, "Nusxalab bo'lmadi"));
+  } else if (t.id === "openproj") {
+    openProjects();
+  } else if (d.saveproj !== undefined) {
+    const input = document.getElementById("pname") as HTMLInputElement;
+    const name = input.value.trim() || state.title || `${typeTitle(state.type)}, ${today()}`;
+    const list = loadProjects();
+    list.unshift({ id: Date.now().toString(36), name: name.slice(0, 60), savedAt: new Date().toISOString(), snapshot: JSON.parse(JSON.stringify(state)) });
+    saveProjects(list);
+    renderProjects();
+  } else if (d.openp) {
+    const p = loadProjects().find((x) => x.id === d.openp);
+    if (p) {
+      state = normalizeState(p.snapshot);
+      saveState();
+      rerenderAll();
+      (document.getElementById("dlg") as HTMLDialogElement).close();
     }
-  } else if (scope === "params") {
-    const fields = state.type === "oshxona" ? KITCHEN_FIELDS : FIELDS[state.type];
-    const f = fields.find((x) => x.key === key);
-    if (!f) return;
-    const v = readNumber(el as HTMLInputElement, f);
-    (state.params[state.type] as unknown as Record<string, number>)[key] = v;
-    (el as HTMLInputElement).value = String(v);
-  } else if (scope === "sheet") {
-    const lim: Record<string, Pick<Field, "min" | "max">> = {
-      length: { min: 1000, max: 4000 },
-      width: { min: 800, max: 2500 },
-      kerf: { min: 0, max: 10 },
-      trim: { min: 0, max: 30 },
-    };
-    if (!lim[key]) return;
-    const v = readNumber(el as HTMLInputElement, lim[key]);
-    (state.sheet as Record<string, number>)[key] = v;
-    (el as HTMLInputElement).value = String(v);
-  } else if (scope === "priceT") {
-    const v = readNumber(el as HTMLInputElement, { min: 0, max: 1e8 });
-    state.prices.sheetByThickness[Number(key)] = v;
-  } else if (scope === "price") {
-    const v = readNumber(el as HTMLInputElement, { min: 0, max: 1e8 });
-    (state.prices as unknown as Record<string, number>)[key] = v;
-  } else if (scope === "labor") {
-    state.prices.labor = { mode: "percent", value: readNumber(el as HTMLInputElement, { min: 0, max: 300 }) };
+  } else if (d.delp) {
+    saveProjects(loadProjects().filter((x) => x.id !== d.delp));
+    renderProjects();
+  } else if (d.closedlg !== undefined) {
+    (document.getElementById("dlg") as HTMLDialogElement).close();
   }
-  save();
-});
+}
 
-render();
+// ---------------------------------------------------------------- Loyihalar oynasi
+
+function renderProjects() {
+  const list = loadProjects();
+  $("dlg").innerHTML = `<div class="dlg"><h2>Loyihalar</h2>
+<div class="saverow"><input type="text" id="pname" placeholder="Nom (masalan: Aziz aka shkafi)" maxlength="60" value="${esc(state.title)}"><button type="button" class="pbtn" data-saveproj>Saqlash</button></div>
+<div class="plist">${
+    list.length
+      ? list
+          .map(
+            (p) =>
+              `<div class="pitem"><button type="button" class="open" data-openp="${esc(p.id)}"><b>${esc(p.name)}</b><small>${esc(typeTitle(p.snapshot?.type ?? "shkaf"))}, ${esc(new Date(p.savedAt).toLocaleDateString("ru-RU"))}</small></button><button type="button" class="iconbtn" data-delp="${esc(p.id)}" aria-label="O'chirish">✕</button></div>`,
+          )
+          .join("")
+      : `<div class="empty">Hali loyiha saqlanmagan. Joriy hisobni nom bilan saqlang, keyin shu yerdan qayta ochasiz.</div>`
+  }</div><button type="button" class="hbtn" data-closedlg>Yopish</button></div>`;
+}
+function openProjects() {
+  renderProjects();
+  const dlg = document.getElementById("dlg") as HTMLDialogElement;
+  if (typeof dlg.showModal === "function") dlg.showModal();
+}
+
+// ---------------------------------------------------------------- Ishga tushirish
+
+function start() {
+  document.addEventListener("click", onClick);
+  document.addEventListener("input", (e) => {
+    const el = e.target as HTMLInputElement;
+    if (el.matches?.('input[data-scope]')) applyInput(el, false);
+  });
+  document.addEventListener("change", (e) => {
+    const el = e.target as HTMLInputElement | HTMLSelectElement;
+    if (el.matches?.("input[data-scope], select[data-scope]")) applyInput(el, true);
+  });
+  renderTabs();
+  rerenderAll();
+  if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
+    navigator.serviceWorker.register("sw.js").catch(() => {});
+  }
+}
+
+if (typeof document !== "undefined") start();

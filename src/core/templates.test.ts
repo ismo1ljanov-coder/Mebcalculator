@@ -98,3 +98,71 @@ test("noto'g'ri katta detal ogohlantirish beradi", () => {
   const c = calculate(huge, SHEET, PRICES);
   assert.ok(c.warnings.some((w) => w.includes("sig'maydi")));
 });
+
+// ---------------------------------------------------------------- Oyoq (tsokol / nikel)
+
+test("oyoq 'yoq': plinth qiymati e'tiborga olinmaydi", () => {
+  const r = buildShkaf({ ...SHKAF_DEFAULT, legType: "yoq", plinth: 150 });
+  assert.equal(r.parts.find((p) => p.name === "Yon devor")!.length, 2200);
+  assert.ok(!r.parts.some((p) => p.name.startsWith("Tsokol")));
+});
+
+test("tsokol: karkas balandligi kamayadi, tsokol planka va plastik oyoq qo'shiladi", () => {
+  const r = buildShkaf({ ...SHKAF_DEFAULT, legType: "tsokol", plinth: 100 });
+  assert.equal(r.parts.find((p) => p.name === "Yon devor")!.length, 2100);
+  const ts = r.parts.find((p) => p.name.startsWith("Tsokol"))!;
+  assert.deepEqual([ts.length, ts.width, ts.qty], [1200, 97, 1]);
+  const leg = r.furniture.find((f) => f.name.startsWith("Rostlanadigan oyoq"))!;
+  assert.equal(leg.qty, 6); // eni 1200 > 1000: o'rtaga qo'shimcha tayanch
+  const narrow = buildShkaf({ ...SHKAF_DEFAULT, width: 900, legType: "tsokol", plinth: 100 });
+  assert.equal(narrow.furniture.find((f) => f.name.startsWith("Rostlanadigan oyoq"))!.qty, 4);
+  // eshik balandligi: 2100 - 6
+  assert.equal(r.parts.find((p) => p.name === "Eshik")!.length, 2094);
+  // orqa devor balandligi: 2100 - 4
+  assert.ok(Math.abs(r.backPanelM2 - (1196 * 2096) / 1e6) < 1e-9);
+});
+
+test("keng shkafda oyoq soni 6 ta", () => {
+  const r = buildShkaf({ ...SHKAF_DEFAULT, width: 1500, legType: "tsokol", plinth: 100 });
+  assert.equal(r.furniture.find((f) => f.name.startsWith("Rostlanadigan oyoq"))!.qty, 6);
+  const n = buildShkaf({ ...SHKAF_DEFAULT, width: 1500, legType: "nikel", plinth: 150 });
+  assert.equal(n.furniture.find((f) => f.name.startsWith("Nikel"))!.qty, 6);
+});
+
+test("nikel oyoq: tsokol planka yo'q, nikel oyoq va plastinka bor, balandlik kamayadi", () => {
+  const r = buildShkaf({ ...SHKAF_DEFAULT, legType: "nikel", plinth: 150 });
+  assert.ok(!r.parts.some((p) => p.name.startsWith("Tsokol")));
+  assert.equal(r.parts.find((p) => p.name === "Yon devor")!.length, 2050);
+  assert.equal(r.furniture.find((f) => f.name.startsWith("Nikel"))!.qty, 6);
+  assert.ok(r.furniture.some((f) => f.name.includes("plastinka")));
+  assert.ok(r.notes.some((n) => n.includes("Nikel oyoq")));
+});
+
+test("kupe: tsokol bilan eshik balandligi oyoqqa mos kamayadi", () => {
+  const a = buildKupe({ ...KUPE_DEFAULT, legType: "yoq" });
+  const b = buildKupe({ ...KUPE_DEFAULT, legType: "tsokol", plinth: 100 });
+  const door = (r: ReturnType<typeof buildKupe>) => r.parts.find((p) => p.name.startsWith("Kupe eshik"))!.length;
+  assert.equal(door(a) - door(b), 100);
+});
+
+test("oshxona: tsokol -> planka m + plastik oyoq; nikel -> nikel oyoq, planka yo'q", () => {
+  const ts = buildOshxona({ ...OSHXONA_DEFAULT, legType: "tsokol" });
+  assert.ok(ts.furniture.some((f) => f.name.startsWith("Tsokol planka")));
+  // 3 ta pastki modul (600, 800, 600) -> 3*4 = 12 oyoq
+  assert.equal(ts.furniture.find((f) => f.name.startsWith("Rostlanadigan oyoq"))!.qty, 12);
+  const nk = buildOshxona({ ...OSHXONA_DEFAULT, legType: "nikel", plinth: 150 });
+  assert.ok(!nk.furniture.some((f) => f.name.startsWith("Tsokol planka")));
+  assert.equal(nk.furniture.find((f) => f.name.startsWith("Nikel"))!.qty, 12);
+  const none = buildOshxona({ ...OSHXONA_DEFAULT, legType: "yoq" });
+  assert.ok(!none.furniture.some((f) => /oyoq/i.test(f.name)));
+});
+
+test("krovat va divan: oyoq turi nomi va balandligi hisobga olinadi", () => {
+  const k = buildKrovat({ ...KROVAT_DEFAULT, legType: "nikel", legHeight: 200 });
+  const leg = k.furniture.find((f) => f.name.startsWith("Nikel"))!;
+  assert.equal(leg.qty, 6); // matras 1600 >= 1400: o'rtada qo'shimcha
+  assert.ok(leg.note!.includes("200"));
+  const d = buildDivan({ ...DIVAN_DEFAULT, legType: "plastik", legHeight: 100 });
+  assert.equal(d.parts.find((p) => p.name.startsWith("Yon"))!.length, 350); // 450 - 100
+  assert.ok(d.furniture.some((f) => f.name === "Plastik oyoq"));
+});

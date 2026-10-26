@@ -10,7 +10,7 @@ import {
   furnitureSection,
   materialSection,
   partsTable,
-  summaryCards,
+  statsStrip,
   esc,
 } from "./render.ts";
 
@@ -33,7 +33,7 @@ for (const type of TYPES) {
     const dims = { length: state.sheet.length, width: state.sheet.width, trim: state.sheet.trim };
 
     const html = [
-      summaryCards(calc, dims.length * dims.width),
+      statsStrip(calc),
       partsTable(build.parts),
       cutSection(calc, dims, build.parts),
       materialSection(calc, state.sheet, state),

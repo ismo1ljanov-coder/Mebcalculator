@@ -3,15 +3,48 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#0f141b">
-  <title>MebCalculator — mebel hisoblash</title>
-  <meta name="description" content="Mebelchi ustalar uchun: o'lchamdan LDSP, kant, DVP, furnitura va raskroy hisobi.">
+  <meta name="theme-color" content="#f5c400">
+  <title>MebCalculator: mebel hisoblash</title>
+  <meta name="description" content="Mebelchi ustalar uchun: o'lchamdan LDSP, kant, DVP, furnitura, raskroy va narx hisobi.">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <header class="bar"><div class="logo">📐</div><div><b>MebCalculator</b><small>Mebelchilar uchun hisob</small></div></header>
-  <main id="app" class="wrap"></main>
-  <footer class="foot">MebCalculator · hisob-kitob taxminiy, ishlab chiqarishdan oldin tekshiring</footer>
+  <header class="hdr">
+    <div class="brand">
+      <svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="14" fill="#F5C400"/><rect x="11" y="13" width="42" height="15" rx="3" fill="none" stroke="#182024" stroke-width="3"/><g stroke="#182024" stroke-width="3" stroke-linecap="round"><path d="M11 47h42"/><path d="M11 47v-9M19.4 47v-5M27.8 47v-9M36.2 47v-5M44.6 47v-9M53 47v-9"/></g></svg>
+      <div><b>MebCalculator</b><small>Mebelchilar uchun hisob</small></div>
+    </div>
+    <button type="button" class="hbtn" id="openproj">Loyihalar</button>
+  </header>
+
+  <main class="app">
+    <div class="printhead" id="printhead"></div>
+    <nav class="types" id="types" aria-label="Mebel turi"></nav>
+    <section class="stage" aria-label="Chizma va asosiy ko'rsatkichlar">
+      <div class="stagehead" id="stagehead"></div>
+      <div class="drawwrap" id="draw"></div>
+      <div class="stats" id="stats"></div>
+      <div id="price"></div>
+    </section>
+    <div class="inputs" id="inputs"></div>
+    <section class="results" id="results" aria-label="Natija">
+      <div class="rtop">
+        <button type="button" class="hbtn" id="share">Ulashish</button>
+        <button type="button" class="hbtn" id="print">PDF / Chop etish</button>
+      </div>
+      <nav class="tabs" id="tabs"></nav>
+      <div id="panes"></div>
+    </section>
+  </main>
+
+  <div class="bar" id="bar"></div>
+  <dialog id="dlg"></dialog>
   <script type="module" src="ui/app.js"></script>
 </body>
 </html>
