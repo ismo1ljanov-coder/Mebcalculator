@@ -18,6 +18,8 @@ import {
   defaultState,
 } from "./forms.ts";
 import type { AppState, Field, Group } from "./forms.ts";
+import { defaultView, render3D } from "./view3d.ts";
+import type { View } from "./view3d.ts";
 import {
   adviceSection,
   barSummary,
@@ -273,6 +275,23 @@ function today(): string {
   return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()}`;
 }
 
+let mode: "2d" | "3d" = "2d";
+let view: View = defaultView();
+let inside = false;
+
+function drawHTML(): string {
+  const tabs = `<div class="vtabs"><button type="button" data-vmode="2d" class="${mode === "2d" ? "on" : ""}">2D chizma</button><button type="button" data-vmode="3d" class="${mode === "3d" ? "on" : ""}">3D ko'rinish</button></div>`;
+  if (mode === "2d") return tabs + drawingSVG(state);
+  const canOpen = state.type === "shkaf" || state.type === "kupe";
+  const tools = `<div class="v3tools"><span>Barmoq bilan suring: aylantirish</span>${canOpen ? `<button type="button" data-vinside="1" class="${inside ? "on" : ""}">${inside ? "Eshikni yop" : "Ichini ko'rsat"}</button>` : ""}<button type="button" data-vreset="1">Qayta</button></div>`;
+  return tabs + `<div class="v3" id="v3">${render3D(state, view, { inside: inside && canOpen })}</div>` + tools;
+}
+
+function redraw3D() {
+  const el = document.getElementById("v3");
+  if (el) el.innerHTML = render3D(state, view, { inside: inside && (state.type === "shkaf" || state.type === "kupe") });
+}
+
 function update() {
   const build = buildFor(state);
   const calc = calculate(build, state.sheet, state.prices);
@@ -280,7 +299,7 @@ function update() {
   const dims = { length: state.sheet.length, width: state.sheet.width, trim: state.sheet.trim };
 
   $("stagehead").innerHTML = `<h1>${esc(typeTitle(state.type))}</h1><span>${esc(describeState(state))}</span>`;
-  $("draw").innerHTML = drawingSVG(state);
+  $("draw").innerHTML = drawHTML();
   $("stats").innerHTML = statsStrip(calc);
   $("price").innerHTML =
     calc.cost.total > 0
@@ -401,7 +420,16 @@ function onClick(e: Event) {
   if (!t) return;
   const d = t.dataset;
 
-  if (d.type) {
+  if (d.vmode) {
+    mode = d.vmode as "2d" | "3d";
+    update();
+  } else if (d.vinside) {
+    inside = !inside;
+    update();
+  } else if (d.vreset) {
+    view = defaultView();
+    update();
+  } else if (d.type) {
     state.type = d.type as FurnitureType;
     saveState();
     rerenderAll();
@@ -527,6 +555,26 @@ function start() {
     const el = e.target as HTMLInputElement | HTMLSelectElement;
     if (el.matches?.("input[data-scope], select[data-scope]")) applyInput(el, true);
   });
+  let drag: { x: number; y: number } | null = null;
+  document.addEventListener("pointerdown", (e) => {
+    const pe = e as PointerEvent;
+    if ((pe.target as HTMLElement)?.closest?.("#v3")) drag = { x: pe.clientX, y: pe.clientY };
+  });
+  document.addEventListener("pointermove", (e) => {
+    if (!drag) return;
+    const pe = e as PointerEvent;
+    view = {
+      yaw: view.yaw + (pe.clientX - drag.x) * 0.5,
+      pitch: Math.max(-5, Math.min(70, view.pitch + (pe.clientY - drag.y) * 0.4)),
+    };
+    drag = { x: pe.clientX, y: pe.clientY };
+    redraw3D();
+  });
+  const end = () => {
+    drag = null;
+  };
+  document.addEventListener("pointerup", end);
+  document.addEventListener("pointercancel", end);
   renderTabs();
   rerenderAll();
   if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {

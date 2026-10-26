@@ -44,7 +44,7 @@ test("ishga tushganda barcha bo'limlar to'ldiriladi", () => {
   assert.ok(els.types.innerHTML.includes("Shkaf") && els.types.innerHTML.includes("Oshxona"));
   assert.ok(els.inputs.innerHTML.includes("lchamlar"));
   assert.ok(els.inputs.innerHTML.includes("Tsokol") && els.inputs.innerHTML.includes("Nikel oyoq"));
-  assert.ok(els.draw.innerHTML.startsWith("<svg"));
+  assert.ok(els.draw.innerHTML.includes("<svg"));
   assert.ok(els.stats.innerHTML.includes("LDSP list"));
   assert.ok(els.panes.innerHTML.includes("Raskroy") && els.panes.innerHTML.includes("<svg"));
   assert.ok(els.bar.innerHTML.includes("qoldiq"));
@@ -57,7 +57,7 @@ test("har bir mebel turiga o'tish xatosiz ishlaydi", () => {
   for (const t of ["kupe", "oshxona", "krovat", "divan", "shkaf"]) {
     click({ type: t });
     assert.equal(saved().type, t);
-    assert.ok(els.draw.innerHTML.startsWith("<svg"), t);
+    assert.ok(els.draw.innerHTML.includes("<svg"), t);
     assert.ok(els.inputs.innerHTML.includes("LDSP qalinligi"), t);
     assert.ok(els.panes.innerHTML.includes("pane"), t);
   }
@@ -151,4 +151,18 @@ test("sarlavha HTMLga xavfsiz chiqariladi", () => {
   typeInto("", '<img src=x onerror=alert(1)>', "title");
   assert.ok(!els.printhead.innerHTML.includes("<img"));
   assert.ok(els.printhead.innerHTML.includes("&lt;img"));
+});
+
+test("3D tugmasi: 3D ko'rinishga o'tadi, ichini ko'rsatadi, 2D ga qaytadi", () => {
+  click({ type: "shkaf" });
+  click({ vmode: "3d" });
+  assert.ok(els.draw.innerHTML.includes("draw3d"));
+  assert.ok(els.draw.innerHTML.includes("Ichini ko'rsat"));
+  click({ vinside: "1" });
+  assert.ok(els.draw.innerHTML.includes("Eshikni yop"));
+  click({ type: "krovat" });
+  assert.ok(els.draw.innerHTML.includes("draw3d"));
+  assert.ok(!els.draw.innerHTML.includes("Ichini ko'rsat"));
+  click({ vmode: "2d" });
+  assert.ok(!els.draw.innerHTML.includes("draw3d"));
 });

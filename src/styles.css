@@ -237,3 +237,17 @@ svg.cut .lbl2 { fill: var(--ink2); font-family: var(--body); }
   .pricebar { background: #eee; color: #000; }
   * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+
+/* 3D ko'rinish */
+.vtabs { display: flex; gap: 6px; padding: 8px 10px 0; background: var(--card); }
+.vtabs button, .v3tools button { font: 600 14px var(--head); padding: 7px 14px; border: 1.5px solid var(--ink); background: var(--card); color: var(--ink); border-radius: 999px; cursor: pointer; }
+.vtabs button.on, .v3tools button.on { background: var(--tape); }
+.v3 { touch-action: none; cursor: grab; user-select: none; padding: 6px 10px 0; background-color: var(--card); }
+.v3:active { cursor: grabbing; }
+svg.draw3d { display: block; width: 100%; height: auto; max-height: 56vh; margin: 0 auto; }
+@media (min-width: 980px) { svg.draw3d { max-height: 520px; } }
+svg.draw3d .f3 { stroke: rgba(24, 32, 36, 0.55); stroke-width: 0.8; stroke-linejoin: round; }
+svg.draw3d .shadow3 { fill: rgba(24, 32, 36, 0.12); }
+.v3tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 6px 10px 10px; background: var(--card); }
+.v3tools span { flex: 1 1 140px; color: var(--ink2); font-size: 13px; }
+@media print { .vtabs, .v3tools { display: none; } }
