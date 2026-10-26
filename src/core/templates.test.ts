@@ -40,7 +40,10 @@ test("shkaf: detallar o'lchami qo'lda hisobga mos", () => {
   const tepa = byName("Tepa");
   assert.deepEqual([tepa.length, tepa.width], [1200 - 32, 550]); // 1168
   const javon = byName("Javon");
-  assert.deepEqual([javon.length, javon.width, javon.qty], [1166, 530, 4]);
+  // 1200 mm eni, javonli: 1 ta o'rta bokovoy, 2 bo'lim, har biri (1168-16)/2 = 576 mm
+  const mid = byName("O'rta bokovoy");
+  assert.deepEqual([mid.length, mid.width, mid.qty], [2200 - 32, 550, 1]);
+  assert.deepEqual([javon.length, javon.width, javon.qty], [574, 530, 8]);
   const eshik = byName("Eshik");
   // (1200 - 3*3)/2 = 595.5 → 596 (yaxlitlanadi), balandlik 2200 - 6 = 2194
   assert.equal(eshik.length, 2194);
@@ -165,4 +168,55 @@ test("krovat va divan: oyoq turi nomi va balandligi hisobga olinadi", () => {
   const d = buildDivan({ ...DIVAN_DEFAULT, legType: "plastik", legHeight: 100 });
   assert.equal(d.parts.find((p) => p.name.startsWith("Yon"))!.length, 350); // 450 - 100
   assert.ok(d.furniture.some((f) => f.name === "Plastik oyoq"));
+});
+
+// ---- Hech narsa qolib ketmasligi (to'liqlik) tekshiruvi
+import { dividerCount } from "./templates.ts";
+
+test("o'rta bokovoy qoidasi", () => {
+  assert.equal(dividerCount(768, true), 0);
+  assert.equal(dividerCount(1168, true), 1); // 1200 mm shkaf, javonli
+  assert.equal(dividerCount(1768, true), 2); // 1800 mm kupe, javonli
+  assert.equal(dividerCount(1168, false), 0);
+  assert.equal(dividerCount(1768, false), 1);
+  assert.equal(dividerCount(2368, false), 1);
+  assert.equal(dividerCount(2768, false), 2);
+});
+
+test("kupe: o'rta bokovoy, shtanga, ruchkasiz eshik profili va relslar hisobda", () => {
+  const r = buildKupe(KUPE_DEFAULT);
+  assert.ok(r.parts.some((p) => p.name === "O'rta bokovoy" && p.qty === 2));
+  assert.ok(r.furniture.some((f) => f.name.startsWith("Shtanga (")));
+  assert.ok(!r.furniture.some((f) => f.name === "Ruchka"));
+  assert.ok(r.furniture.some((f) => f.name.includes("rels")));
+  assert.ok(r.furniture.some((f) => f.name.includes("ramka profili (vertikal)") && f.qty === 4));
+  assert.ok(r.notes.some((n) => n.includes("o'rta bokovoy")));
+});
+
+test("shkaf/kupe/oshxona/krovat/divan: har bir detal raskroyga joylashadi (soni teng)", () => {
+  const builds = [
+    buildShkaf({ ...SHKAF_DEFAULT, drawers: 2, rods: 1, legType: "tsokol", plinth: 100 }),
+    buildShkaf({ ...SHKAF_DEFAULT, width: 3000, shelves: 5 }),
+    buildKupe(KUPE_DEFAULT),
+    buildKupe({ ...KUPE_DEFAULT, width: 3000, sliding: 3, legType: "nikel", plinth: 120 }),
+    buildOshxona(OSHXONA_DEFAULT),
+    buildKrovat({ ...KROVAT_DEFAULT, drawers: 2 }),
+    buildDivan(DIVAN_DEFAULT),
+  ];
+  for (const b of builds) {
+    const total = b.parts.reduce((s, p) => s + p.qty, 0);
+    const calc = calculate(b, SHEET, PRICES);
+    const placed = calc.groups.reduce((s, g) => s + g.pack.sheets.reduce((x, sh) => x + sh.placements.length, 0), 0);
+    assert.equal(calc.warnings.filter((w) => w.includes("sig'maydi")).length, 0);
+    assert.equal(placed, total, "joylashgan detal soni jami detal soniga teng bo'lishi kerak");
+  }
+});
+
+test("oshxona: osma planka, tumba biriktirish boltlari va krovat sandiq orqa/taglik bor", () => {
+  const o = buildOshxona(OSHXONA_DEFAULT);
+  assert.ok(o.parts.some((p) => p.name.includes("Osma planka")));
+  assert.ok(o.furniture.some((f) => f.name.startsWith("Tumbalarni biriktiruvchi")));
+  const k = buildKrovat({ ...KROVAT_DEFAULT, drawers: 2 });
+  assert.ok(k.parts.some((p) => p.name === "Sandiq tortma orqa"));
+  assert.ok(k.furniture.some((f) => f.name === "Tortma taglik DVP"));
 });

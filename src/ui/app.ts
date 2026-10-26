@@ -33,6 +33,7 @@ import {
   furnitureSection,
   materialSection,
   partsTable,
+  partsCheck,
   statsStrip,
   typeTitle,
 } from "./render.ts";
@@ -308,7 +309,7 @@ function update() {
 
   const panes: Record<string, string> = {
     raskroy: cutSection(calc, dims, build.parts),
-    kesim: `<button type="button" class="hbtn" id="copycut" style="margin-bottom:10px">Ro'yxatni nusxalash</button>${partsTable(build.parts)}`,
+    kesim: `<button type="button" class="hbtn" id="copycut" style="margin-bottom:10px">Ro'yxatni nusxalash</button>${partsCheck(build.parts, calc)}${partsTable(build.parts)}`,
     material: materialSection(calc, state.sheet, state),
     furnitura: furnitureSection(build),
     maslahat: adviceSection(calc, build),

@@ -1,10 +1,10 @@
 // Kutubxonasiz 3D ko'rinish: mebel to'g'ri burchakli bo'laklardan (box) yig'iladi, SVG'da chiziladi.
 // Orqada turgan bo'laklar oldin chiziladi (ressomlar usuli), tartib har bir juft bo'lak orasidagi
 // ajratuvchi tekislik bo'yicha aniqlanadi, shuning uchun istalgan burchakdan to'g'ri chiqadi.
-import { legCountFor, legHeightOf } from "../core/templates.ts";
+import { dividerCount, legCountFor, legHeightOf } from "../core/templates.ts";
 import type { AppState } from "./forms.ts";
 
-export type Mat = "body" | "back" | "door" | "leg" | "tsokol" | "counter" | "mattress" | "fabric" | "handle" | "wood";
+export type Mat = "body" | "back" | "door" | "leg" | "tsokol" | "counter" | "mattress" | "fabric" | "handle" | "wood" | "alu" | "fartuk";
 
 export type Box = { x0: number; x1: number; y0: number; y1: number; z0: number; z1: number; mat: Mat };
 export type View = { yaw: number; pitch: number };
@@ -30,18 +30,36 @@ export function buildScene(state: AppState, opts: { inside?: boolean } = {}): Sc
       B.push(bx(0, t, lh, H, 0, D, "body"), bx(W - t, W, lh, H, 0, D, "body"));
       B.push(bx(t, W - t, H - t, H, 0, D, "body"), bx(t, W - t, lh, lh + t, 0, D, "body"));
       B.push(bx(t, W - t, lh + t, H - t, 0, 4, "back"));
+      const innerW = W - 2 * t;
+      const nd = dividerCount(innerW, p.shelves > 0);
+      const secW = (innerW - nd * t) / (nd + 1);
+      const secX = (k: number) => t + k * (secW + t);
+      if (inside || state.type === "kupe") {
+        // O'rta bokovoylar (kupe eshigi ortidan ham ko'rinadi, shuning uchun doim chiziladi)
+        for (let k = 1; k <= nd; k++) B.push(bx(secX(k) - t, secX(k), lh + t, H - t, 0, D, "body"));
+      }
       if (inside) {
-        for (let i = 1; i <= p.shelves; i++) {
-          const y = lh + t + (innerH * i) / (p.shelves + 1) - t / 2;
-          B.push(bx(t, W - t, y, y + t, 4, D - 20, "body"));
+        for (let k = 0; k <= nd; k++) {
+          for (let i = 1; i <= p.shelves; i++) {
+            const y = lh + t + (innerH * i) / (p.shelves + 1) - t / 2;
+            B.push(bx(secX(k), secX(k) + secW, y, y + t, 4, D - 20, "body"));
+          }
+        }
+        for (let r = 0; r < p.rods; r++) {
+          const k = Math.min(nd, r);
+          B.push(bx(secX(k) + 8, secX(k) + secW - 8, H - t - 140, H - t - 120, D / 2 - 10, D / 2 + 10, "alu"));
         }
       }
-      // tortma fasadlari (har doim ko'rinadi)
+      // tortmalar: birinchi bo'limda. Kupe eshigi ortida (ichkarida), shkafda esa old tomonda
       const dh = p.drawers > 0 ? Math.min(180, innerH / (p.drawers + 1)) : 0;
+      const dz = state.type === "kupe" ? D - 110 : D;
       for (let i = 0; i < p.drawers; i++) {
         const y0 = lh + t + 3 + i * (dh + 4);
-        B.push(bx(t + 3, W - t - 3, y0, y0 + dh, D, D + t, "door"));
-        B.push(bx(W / 2 - 70, W / 2 + 70, y0 + dh / 2 - 7, y0 + dh / 2 + 7, D + t, D + t + 18, "handle"));
+        B.push(bx(secX(0) + 3, secX(0) + secW - 3, y0, y0 + dh, dz, dz + t, "door"));
+        if (state.type !== "kupe") {
+          const cx = secX(0) + secW / 2;
+          B.push(bx(cx - 70, cx + 70, y0 + dh / 2 - 7, y0 + dh / 2 + 7, dz + t, dz + t + 18, "handle"));
+        }
       }
       const doorBottom = lh + 3 + (p.drawers > 0 ? p.drawers * (dh + 4) + t : 0);
       if (!inside) {
@@ -57,18 +75,24 @@ export function buildScene(state: AppState, opts: { inside?: boolean } = {}): Sc
             B.push(bx(hx, hx + 14, hy - 70, hy + 70, D + t, D + t + 18, "handle"));
           }
         }
-        if (state.type === "kupe") {
-          const n = Math.max(2, state.params.kupe.sliding);
-          const overlap = 30;
-          const dw = (W - 2 * t + overlap * (n - 1)) / n;
-          const y0 = lh + t + 25;
-          const y1 = H - t - 25;
+      }
+      if (state.type === "kupe") {
+        const n = Math.max(2, state.params.kupe.sliding);
+        const overlap = 30;
+        const dw = (W - 2 * t + overlap * (n - 1)) / n;
+        const y0 = lh + t + 25;
+        const y1 = H - t - 25;
+        // Yuqori va pastki rels (g'ildirak yo'li)
+        B.push(bx(t, W - t, H - t - 25, H - t, D - 62, D - 12, "alu"));
+        B.push(bx(t, W - t, lh + t, lh + t + 12, D - 62, D - 12, "alu"));
+        if (!inside) {
+          const bar = 22;
           for (let i = 0; i < n; i++) {
             const x0 = t + i * (dw - overlap);
             const z0 = i % 2 === 0 ? D - 26 : D - 52;
             B.push(bx(x0, x0 + dw, y0, y1, z0, z0 + 16, "door"));
-            const hx = i % 2 === 0 ? x0 + dw - 40 : x0 + 26;
-            B.push(bx(hx, hx + 12, (y0 + y1) / 2 - 90, (y0 + y1) / 2 + 90, z0 + 16, z0 + 24, "handle"));
+            // Ruchka yo'q: alyuminiy ramka profili eshikni ushlash vazifasini ham bajaradi
+            B.push(bx(x0, x0 + bar, y0, y1, z0 - 2, z0 + 20, "alu"), bx(x0 + dw - bar, x0 + dw, y0, y1, z0 - 2, z0 + 20, "alu"));
           }
         }
       }
@@ -128,6 +152,10 @@ export function buildScene(state: AppState, opts: { inside?: boolean } = {}): Sc
       if (baseW > 0) {
         B.push(bx(0, baseW, lh + k.baseHeight, lh + k.baseHeight + 38, 0, k.baseDepth + 30, "counter"));
         if (lh > 0 && k.legType === "tsokol") B.push(bx(0, baseW, 0, lh - 3, k.baseDepth - 66, k.baseDepth - 50, "tsokol"));
+      }
+      if (baseW > 0 && wallMods.length > 0) {
+        const wxEnd = Math.min(baseW, wallMods.reduce((q, m) => q + m.width, 0));
+        B.push(bx(0, wxEnd, lh + k.baseHeight + 38, lh + k.baseHeight + 38 + gapMid - 38, 0, 12, "fartuk"));
       }
       let wx = 0;
       const wy0 = lh + k.baseHeight + 38 + gapMid - 38;
@@ -298,6 +326,8 @@ const MAT: Record<Mat, string> = {
   fabric: "#8fa5a0",
   handle: "#39434a",
   wood: "#b98f52",
+  alu: "#c3cacd",
+  fartuk: "#d9e0dc",
 };
 
 function shadeHex(hex: string, f: number): string {

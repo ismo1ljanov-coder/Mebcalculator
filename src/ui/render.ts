@@ -1,5 +1,5 @@
 import type { CalcResult } from "../core/calculator.ts";
-import { legCountFor, legHeightOf } from "../core/templates.ts";
+import { dividerCount, legCountFor, legHeightOf } from "../core/templates.ts";
 import type { BuildResult, FurnitureType, KitchenModule } from "../core/templates.ts";
 import type { PackedSheet, Part } from "../core/types.ts";
 import type { AppState } from "./forms.ts";
@@ -42,6 +42,14 @@ export function barSummary(calc: CalcResult): { sheets: number; waste: number; c
 }
 
 // ------------------------------------------------------------ Kesim jadvali
+
+/** Tekshiruv: jami detal soni raskroyga joylashgan detal soniga tengmi */
+export function partsCheck(parts: Part[], calc: CalcResult): string {
+  const total = parts.reduce((x, p) => x + p.qty, 0);
+  const placed = calc.groups.reduce((x, g) => x + g.pack.sheets.reduce((y, sh) => y + sh.placements.length, 0), 0);
+  const ok = placed === total;
+  return `<p class="check ${ok ? "ok" : "bad"}"><b>Jami: ${total} ta detal</b> (${parts.length} xil). Raskroyga joylashgan: ${placed} ta ${ok ? "✓ hech biri qolmadi" : "⚠ ba'zilari sig'madi, ogohlantirishlarga qarang"}.</p>`;
+}
 
 export function partsTable(parts: Part[]): string {
   const rows = parts
@@ -220,17 +228,29 @@ function frontCabinet(o: {
   doors: number;
   sliding: number;
   drawers: number;
+  rods: number;
   u: number;
 }): string {
-  const { x, y, W, H, t, legH, legType, shelves, doors, sliding, drawers, u } = o;
+  const { x, y, W, H, t, legH, legType, shelves, doors, sliding, drawers, rods, u } = o;
   const bodyH = H - legH;
   const g: string[] = [];
   g.push(`<rect x="${x}" y="${y}" width="${W}" height="${bodyH}" class="wood"/>`);
   g.push(`<rect x="${x + t}" y="${y + t}" width="${W - 2 * t}" height="${bodyH - 2 * t}" class="woodin"/>`);
   const innerH = bodyH - 2 * t;
-  for (let i = 1; i <= shelves; i++) {
-    const sy = y + t + (innerH * i) / (shelves + 1) - t / 2;
-    g.push(`<rect x="${x + t}" y="${sy}" width="${W - 2 * t}" height="${t}" class="shelf"/>`);
+  // O'rta bokovoylar va ularning orasidagi javonlar
+  const nd = dividerCount(W - 2 * t, shelves > 0);
+  const secW = (W - 2 * t - nd * t) / (nd + 1);
+  const secX = (k: number) => x + t + k * (secW + t);
+  for (let k = 1; k <= nd; k++) g.push(`<rect x="${secX(k) - t}" y="${y + t}" width="${t}" height="${innerH}" class="wood"/>`);
+  for (let k = 0; k <= nd; k++) {
+    for (let i = 1; i <= shelves; i++) {
+      const sy = y + t + (innerH * i) / (shelves + 1) - t / 2;
+      g.push(`<rect x="${secX(k)}" y="${sy}" width="${secW}" height="${t}" class="shelf"/>`);
+    }
+  }
+  for (let r = 0; r < rods; r++) {
+    const k = Math.min(nd, r);
+    g.push(`<line x1="${secX(k) + 10}" y1="${y + t + 130}" x2="${secX(k) + secW - 10}" y2="${y + t + 130}" class="rodl"/>`);
   }
   if (drawers > 0) {
     const dh = Math.min(180, innerH / (drawers + 1));
@@ -258,7 +278,12 @@ function frontCabinet(o: {
     for (let i = 0; i < sliding; i++) {
       const dx = x + t + i * (dw - overlap);
       g.push(`<rect x="${dx}" y="${y + t}" width="${dw}" height="${bodyH - 2 * t}" class="door ${i % 2 ? "back" : ""}"/>`);
+      // Ruchka o'rniga alyuminiy ramka profili
+      const bar = Math.max(14, u * 0.45);
+      g.push(`<rect x="${dx}" y="${y + t}" width="${bar}" height="${bodyH - 2 * t}" class="legn"/><rect x="${dx + dw - bar}" y="${y + t}" width="${bar}" height="${bodyH - 2 * t}" class="legn"/>`);
     }
+    // Yuqori va pastki rels
+    g.push(`<rect x="${x + t}" y="${y + t}" width="${W - 2 * t}" height="${Math.max(10, u * 0.35)}" class="legn"/><rect x="${x + t}" y="${y + bodyH - t - Math.max(10, u * 0.35)}" width="${W - 2 * t}" height="${Math.max(10, u * 0.35)}" class="legn"/>`);
   }
   if (legH > 0) {
     if (legType === "tsokol") g.push(`<rect x="${x}" y="${y + bodyH}" width="${W}" height="${legH - 3}" class="tsokol"/>`);
@@ -293,6 +318,7 @@ export function drawingSVG(state: AppState): string {
         doors: state.type === "shkaf" ? state.params.shkaf.doors : 0,
         sliding: state.type === "kupe" ? state.params.kupe.sliding : 0,
         drawers: p.drawers,
+        rods: p.rods,
         u,
       });
       const floorY = y0 + p.height;

@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { defaultState } from "./forms.ts";
 import { buildScene, render3D, defaultView, orderBoxes } from "./view3d.ts";
+import { dividerCount } from "../core/templates.ts";
 import type { FurnitureType } from "../core/templates.ts";
 
 const TYPES: FurnitureType[] = ["shkaf", "kupe", "oshxona", "krovat", "divan"];
@@ -40,7 +41,8 @@ test("ichini ko'rsatganda javonlar bor, eshiklar yo'q", () => {
   assert.ok(closed.boxes.some((b) => b.mat === "door"));
   assert.ok(!open.boxes.some((b) => b.mat === "door"));
   const bodies = (x: typeof open) => x.boxes.filter((b) => b.mat === "body").length;
-  assert.equal(bodies(open) - bodies(closed), s.params.shkaf.shelves);
+  const d = dividerCount(s.params.shkaf.width - 2 * s.params.shkaf.thickness, true);
+  assert.equal(bodies(open) - bodies(closed), s.params.shkaf.shelves * (d + 1) + d);
 });
 
 test("chizish tartibi istalgan burchakda sikl hosil qilmaydi", () => {
@@ -59,4 +61,13 @@ test("chizish tartibi istalgan burchakda sikl hosil qilmaydi", () => {
   assert.deepEqual(front.order, [0, 1]);
   const back = orderBoxes(b, [0, 0, -1], [rect, rect]);
   assert.deepEqual(back.order, [1, 0]);
+});
+
+test("kupe 3D: ruchka yo'q, rels va alyuminiy profil bor, o'rta bokovoy ko'rinadi", () => {
+  const s = defaultState();
+  s.type = "kupe";
+  const sc = buildScene(s);
+  assert.ok(!sc.boxes.some((b) => b.mat === "handle"));
+  assert.ok(sc.boxes.filter((b) => b.mat === "alu").length >= 2 + 4);
+  assert.ok(sc.boxes.filter((b) => b.mat === "body").length >= 4 + 2); // karkas + 2 ta o'rta bokovoy
 });

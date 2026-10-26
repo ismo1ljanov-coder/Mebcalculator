@@ -44,10 +44,12 @@ export const GROUPS: Record<Exclude<FurnitureType, "oshxona">, Group[]> = {
   shkaf: [
     { title: "O'lchamlar", cols: 3, fields: [W(300, 4000), H(300, 2800), D(200, 800)] },
     { title: "Ichki tuzilma", cols: 3, fields: [N("shelves", "Javon", 12), N("doors", "Eshik", 6), N("drawers", "Tortma", 8)] },
+    { title: "Qo'shimcha", cols: 3, fields: [N("rods", "Shtanga (kiyim osish)", 4)] },
   ],
   kupe: [
     { title: "O'lchamlar", cols: 3, fields: [W(800, 4500), H(1500, 2800), D(300, 800)] },
     { title: "Ichki tuzilma", cols: 3, fields: [N("sliding", "Kupe eshik", 5, 2), N("shelves", "Javon", 12), N("drawers", "Tortma", 8)] },
+    { title: "Qo'shimcha", cols: 3, fields: [N("rods", "Shtanga (kiyim osish)", 4)] },
   ],
   krovat: [
     {
