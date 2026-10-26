@@ -268,7 +268,8 @@ function addWallBrackets(height: number, furniture: FurnitureItem[], notes: stri
 
 // ---------------------------------------------------------------- KUPE
 
-export type KupeParams = ShkafParams & { sliding: number };
+/** antresol: kupe tepasidagi alohida ochiladigan shkafcha balandligi, mm (0 = yo'q) */
+export type KupeParams = ShkafParams & { sliding: number; antresol: number };
 
 export const KUPE_DEFAULT: KupeParams = {
   ...SHKAF_DEFAULT,
@@ -278,15 +279,17 @@ export const KUPE_DEFAULT: KupeParams = {
   doors: 0,
   rods: 1,
   sliding: 2,
+  antresol: 0,
 };
 
 export function buildKupe(p: KupeParams): BuildResult {
   const t = p.thickness;
-  const { parts, d, secW, pieces, plan, totalShelves } = carcass({ ...p, doors: 0 });
+  const A = Math.max(0, p.antresol);
+  const { parts, d, secW, pieces, plan, totalShelves } = carcass({ ...p, doors: 0, height: p.height - A });
   const furniture: FurnitureItem[] = [];
   const notes: string[] = [];
-  const bodyH = p.height - legHeightOf(p);
-  const backPanelM2 = ((p.width - 4) * (bodyH - 4)) / 1e6;
+  const bodyH = p.height - A - legHeightOf(p);
+  let backPanelM2 = ((p.width - 4) * (bodyH - 4)) / 1e6;
 
   const n = Math.max(2, p.sliding);
   const overlap = 30;
@@ -309,6 +312,27 @@ export function buildKupe(p: KupeParams): BuildResult {
 
   addLegs(p, parts, furniture, notes);
 
+  if (A > 0) {
+    // Antresol: kupe ustidagi alohida shkafcha, oldi ochiladigan (sharnirli) eshiklar
+    const inner = p.width - 2 * t;
+    const aPieces = Math.max(1, Math.ceil(inner / MAX_PANEL));
+    parts.push(mk("Antresol yon", A, p.depth, 2, t, { grain: true, edge: frontEdge }));
+    parts.push(mk("Antresol tepa", Math.ceil(inner / aPieces), p.depth, aPieces, t, { edge: frontEdge }));
+    const aSections = Math.max(1, Math.ceil(inner / 800));
+    if (aSections > 1) parts.push(mk("Antresol o'rta bokovoy", A - 2 * t, p.depth, aSections - 1, t, { grain: true, edge: frontEdge }));
+    const dn = Math.max(2, Math.ceil(p.width / 450));
+    const gap = 3;
+    const aDoorW = Math.floor((p.width - gap * (dn + 1)) / dn);
+    const aDoorH = A - 2 * gap;
+    parts.push(mk("Antresol eshik", aDoorH, aDoorW, dn, t, { grain: true, edge: allEdge }));
+    const hp = hingesPerDoor(aDoorH);
+    furniture.push({ name: "Sharnir (antresol eshigi)", qty: hp * dn, unit: "dona" });
+    furniture.push({ name: "Sharnir plankasi (antresol)", qty: hp * dn, unit: "dona" });
+    furniture.push({ name: "Ruchka (antresol)", qty: dn, unit: "dona", note: "yoki bosib ochiladigan (push) mexanizm" });
+    furniture.push({ name: "Konfirmat (antresol)", qty: 8 + (aSections - 1) * 4, unit: "dona" });
+    backPanelM2 += ((p.width - 4) * (A - 4)) / 1e6;
+    notes.push(`Antresol: ${A} mm balandlik, ${dn} ta eshik. Kupe tepasiga qo'yiladi, ikki yon devor kupe yoniga tegib turishi uchun o'lchamni tekshiring.`);
+  }
   addDividerNote(d, secW, p.shelves > 0, notes);
   addPlanNote(plan, notes);
   addSplitNote(pieces, notes);

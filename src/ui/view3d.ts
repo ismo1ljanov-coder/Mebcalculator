@@ -22,7 +22,9 @@ export function buildScene(state: AppState, opts: { inside?: boolean } = {}): Sc
     case "kupe": {
       const p = state.params[state.type];
       const W = p.width;
-      const H = p.height;
+      const A = state.type === "kupe" ? state.params.kupe.antresol : 0;
+      const FULLH = p.height;
+      const H = p.height - A;
       const D = p.depth;
       const t = p.thickness;
       const lh = legHeightOf(p);
@@ -93,6 +95,22 @@ export function buildScene(state: AppState, opts: { inside?: boolean } = {}): Sc
             B.push(bx(x0, x0 + dw, y0, y1, z0, z0 + 16, "door"));
             // Ruchka yo'q: alyuminiy ramka profili eshikni ushlash vazifasini ham bajaradi
             B.push(bx(x0, x0 + bar, y0, y1, z0 - 2, z0 + 20, "alu"), bx(x0 + dw - bar, x0 + dw, y0, y1, z0 - 2, z0 + 20, "alu"));
+          }
+        }
+      }
+      // Antresol: kupe tepasida alohida ochiladigan shkafcha
+      if (A > 0) {
+        const aBody = A - 3;
+        B.push(bx(0, t, H, FULLH, 0, D, "body"), bx(W - t, W, H, FULLH, 0, D, "body"), bx(t, W - t, FULLH - t, FULLH, 0, D, "body"));
+        B.push(bx(t, W - t, H, FULLH - t, 0, 4, "back"));
+        if (!inside) {
+          const dn = Math.max(2, Math.ceil(W / 450));
+          const dw = (W - 3 * (dn + 1)) / dn;
+          for (let i = 0; i < dn; i++) {
+            const x0 = 3 + i * (dw + 3);
+            B.push(bx(x0, x0 + dw, H + 3, FULLH - 3, D, D + t, "door"));
+            const hx = i % 2 === 0 ? x0 + dw - 30 : x0 + 18;
+            B.push(bx(hx, hx + 12, H + 20, H + aBody * 0.6, D + t, D + t + 16, "handle"));
           }
         }
       }

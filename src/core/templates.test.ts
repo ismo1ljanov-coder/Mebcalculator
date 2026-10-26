@@ -247,3 +247,17 @@ test("shkaf 1800: javon soni faqat javonli bo'limlar uchun hisoblanadi", () => {
   assert.ok(r.notes.some((n) => n.includes("1 ta osma")));
   assert.equal(r.furniture.find((f) => f.name.startsWith("Shtanga ("))!.qty, 1);
 });
+
+test("kupe antresol: alohida detallar, sharnir va eshiklar hisobga kiradi, kupe balandligi kamayadi", () => {
+  const base = buildKupe(KUPE_DEFAULT);
+  const r = buildKupe({ ...KUPE_DEFAULT, antresol: 500 });
+  assert.ok(r.parts.some((p) => p.name === "Antresol eshik" && p.qty >= 4));
+  assert.ok(r.furniture.some((f) => f.name.includes("antresol")));
+  const yonBase = base.parts.find((p) => p.name === "Yon devor")!;
+  const yon = r.parts.find((p) => p.name === "Yon devor")!;
+  assert.equal(yonBase.length - yon.length, 500);
+  const total = r.parts.reduce((s, p) => s + p.qty, 0);
+  const calc = calculate(r, SHEET, PRICES);
+  const placed = calc.groups.reduce((s, g) => s + g.pack.sheets.reduce((x, sh) => x + sh.placements.length, 0), 0);
+  assert.equal(placed, total);
+});

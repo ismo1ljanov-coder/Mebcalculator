@@ -340,11 +340,22 @@ export function drawingSVG(state: AppState): string {
       const x0 = u * 3.6;
       const y0 = u * 1.2;
       const legH = legHeightOf(p);
-      const body = frontCabinet({
+      const A = state.type === "kupe" ? state.params.kupe.antresol : 0;
+      let antresolSvg = "";
+      if (A > 0) {
+        const dn = Math.max(2, Math.ceil(p.width / 450));
+        const dw = (p.width - 3 * (dn + 1)) / dn;
+        antresolSvg = `<rect x="${x0}" y="${y0}" width="${p.width}" height="${A}" class="wood"/>`;
+        for (let i = 0; i < dn; i++) {
+          const dx = x0 + 3 + i * (dw + 3);
+          antresolSvg += `<rect x="${dx}" y="${y0 + 3}" width="${dw}" height="${A - 6}" class="door"/><line x1="${i % 2 === 0 ? dx + dw - 28 : dx + 28}" y1="${y0 + A - 40}" x2="${i % 2 === 0 ? dx + dw - 28 : dx + 28}" y2="${y0 + A - 40 - Math.min(110, A * 0.5)}" class="handle"/>`;
+        }
+      }
+      const body = antresolSvg + frontCabinet({
         x: x0,
-        y: y0,
+        y: y0 + A,
         W: p.width,
-        H: p.height,
+        H: p.height - A,
         t: p.thickness,
         legH,
         legType: p.legType,
