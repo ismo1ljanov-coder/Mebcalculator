@@ -33,6 +33,23 @@ export const TYPE_LABELS: Record<FurnitureType, string> = {
   divan: "Divan",
 };
 
+/** Eshik/fasad ranglari (vizual; narx va hisobga ta'sir qilmaydi) */
+export const FINISHES = [
+  { id: "krem", label: "Krem", hex: "#efe7d6" },
+  { id: "oq", label: "Oq", hex: "#f6f5f1" },
+  { id: "kulrang", label: "Kulrang", hex: "#a9afb2" },
+  { id: "grafit", label: "Grafit", hex: "#4b545a" },
+  { id: "eman", label: "Eman", hex: "#c49b62" },
+  { id: "yashil", label: "Yashil", hex: "#6f9488" },
+] as const;
+export function finishHex(id: string): string {
+  return (FINISHES.find((f) => f.id === id) ?? FINISHES[0]).hex;
+}
+export const HANDLE_STYLES = [
+  { id: "ruchka", label: "Ruchka bilan" },
+  { id: "profil", label: "Ruchkasiz (profil)" },
+] as const;
+
 export const THICKNESSES = [16, 18, 22] as const;
 
 const W = (min: number, max: number): Field => ({ key: "width", label: "Eni", unit: "mm", min, max });
@@ -93,6 +110,7 @@ export const KITCHEN_GROUPS: Group[] = [
       { key: "baseDepth", label: "Pastki tumba chuqurligi", unit: "mm", min: 400, max: 700 },
       { key: "wallHeight", label: "Yuqori shkaf balandligi", unit: "mm", min: 300, max: 1100 },
       { key: "wallDepth", label: "Yuqori shkaf chuqurligi", unit: "mm", min: 200, max: 450 },
+      { key: "tallHeight", label: "Penal (baland ustun) balandligi", unit: "mm", min: 1800, max: 2700 },
     ],
   },
 ];

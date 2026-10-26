@@ -71,3 +71,18 @@ test("kupe 3D: ruchka yo'q, rels va alyuminiy profil bor, o'rta bokovoy ko'rinad
   assert.ok(sc.boxes.filter((b) => b.mat === "alu").length >= 2 + 4);
   assert.ok(sc.boxes.filter((b) => b.mat === "body").length >= 4 + 2); // karkas + 2 ta o'rta bokovoy
 });
+
+test("oshxona 3D: penal shiftga yaqin balandlikda, rang va ruchkasiz profil", () => {
+  const s = defaultState();
+  s.type = "oshxona";
+  const sc = buildScene(s);
+  const maxY = Math.max(...sc.boxes.map((b) => b.y1));
+  assert.equal(maxY, s.params.oshxona.tallHeight);
+  const doors = sc.boxes.filter((b) => b.mat === "door");
+  assert.ok(doors.length > 0 && doors.every((b) => typeof b.color === "string"));
+  s.params.oshxona.handles = "ruchka";
+  const withH = buildScene(s).boxes.filter((b) => b.mat === "handle").length;
+  s.params.oshxona.handles = "profil";
+  const slots = buildScene(s).boxes.filter((b) => b.mat === "handle").length;
+  assert.ok(withH > 0 && slots > 0);
+});

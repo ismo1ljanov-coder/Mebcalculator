@@ -8,6 +8,8 @@ import {
   KITCHEN_GROUPS,
   MATTRESS_PRESETS,
   MODULE_FIELDS,
+  FINISHES,
+  HANDLE_STYLES,
   NEW_MODULE,
   SUGGESTED_LEG_HEIGHT,
   THICKNESSES,
@@ -107,8 +109,21 @@ function sanitize(st: AppState) {
   }
   for (const g of KITCHEN_GROUPS) for (const f of g.fields) (st.params.oshxona as any)[f.key] = lim((st.params.oshxona as any)[f.key], f.min, f.max);
   for (const m of st.params.oshxona.modules as any[]) {
-    m.kind = m.kind === "yuqori" ? "yuqori" : "past";
+    m.kind = m.kind === "yuqori" || m.kind === "penal" ? m.kind : "past";
     for (const f of MODULE_FIELDS) m[f.key] = lim(m[f.key], f.min, f.max);
+  }
+  const fin = (v: unknown, d: string) => (FINISHES.some((f) => f.id === v) ? (v as string) : d);
+  const hnd = (v: unknown) => (v === "profil" ? "profil" : "ruchka");
+  for (const t of ["shkaf", "kupe"] as const) {
+    const p = st.params[t] as any;
+    p.color = fin(p.color, "krem");
+    p.handles = hnd(p.handles);
+  }
+  {
+    const o = st.params.oshxona as any;
+    o.upperColor = fin(o.upperColor, "kulrang");
+    o.lowerColor = fin(o.lowerColor, "eman");
+    o.handles = hnd(o.handles);
   }
   const th = (v: number) => ((THICKNESSES as readonly number[]).includes(v) ? v : 16);
   for (const t of TYPES) (st.params[t] as any).thickness = th((st.params[t] as any).thickness);
@@ -206,6 +221,32 @@ function legsHTML(): string {
   }</section>`;
 }
 
+function swatches(label: string, key: string, cur: string): string {
+  return `<div class="swrow"><span class="swlabel">${esc(label)}</span><div class="sws">${FINISHES.map(
+    (f) => `<button type="button" class="sw ${cur === f.id ? "on" : ""}" data-fin="${key}:${f.id}" style="background:${f.hex}" aria-label="${f.label}" title="${f.label}"></button>`,
+  ).join("")}</div></div>`;
+}
+
+/** Rang va ochish usuli (ruchka / ruchkasiz profil) */
+function lookHTML(): string {
+  const t = state.type;
+  if (t === "oshxona") {
+    const k = state.params.oshxona;
+    return `<section class="sec"><h2>Ko'rinish</h2>${swatches("Yuqori shkaflar rangi", "upperColor", k.upperColor)}${swatches("Pastki tumba va penal rangi", "lowerColor", k.lowerColor)}<div class="seg" style="margin-top:12px">${HANDLE_STYLES.map(
+      (h) => `<button type="button" data-hnd="${h.id}" class="${k.handles === h.id ? "on" : ""}">${h.label}</button>`,
+    ).join("")}</div></section>`;
+  }
+  if (t === "shkaf" || t === "kupe") {
+    const p = state.params[t];
+    const seg =
+      t === "shkaf"
+        ? `<div class="seg" style="margin-top:12px">${HANDLE_STYLES.map((h) => `<button type="button" data-hnd="${h.id}" class="${state.params.shkaf.handles === h.id ? "on" : ""}">${h.label}</button>`).join("")}</div>`
+        : `<p class="hint">Kupe eshiklari ruchkasiz: alyuminiy profil ushlagich vazifasini bajaradi.</p>`;
+    return `<section class="sec"><h2>Ko'rinish</h2>${swatches("Eshik rangi", "color", p.color)}${seg}</section>`;
+  }
+  return "";
+}
+
 function inputsHTML(): string {
   const t = state.type;
   const h: string[] = [];
@@ -219,7 +260,7 @@ function inputsHTML(): string {
     h.push(
       `<section class="sec"><h2>Modullar</h2>${state.params.oshxona.modules
         .map(
-          (m, i) => `<div class="mod"><div class="modhead"><select data-scope="mod" data-i="${i}" data-key="kind" aria-label="Modul turi"><option value="past" ${m.kind === "past" ? "selected" : ""}>Pastki tumba</option><option value="yuqori" ${m.kind === "yuqori" ? "selected" : ""}>Yuqori shkaf</option></select><button type="button" class="iconbtn" data-del="${i}" aria-label="Modulni o'chirish">✕</button></div><div class="row c4">${MODULE_FIELDS.map((f) =>
+          (m, i) => `<div class="mod"><div class="modhead"><select data-scope="mod" data-i="${i}" data-key="kind" aria-label="Modul turi"><option value="past" ${m.kind === "past" ? "selected" : ""}>Pastki tumba</option><option value="yuqori" ${m.kind === "yuqori" ? "selected" : ""}>Yuqori shkaf</option><option value="penal" ${m.kind === "penal" ? "selected" : ""}>Penal (baland ustun)</option></select><button type="button" class="iconbtn" data-del="${i}" aria-label="Modulni o'chirish">✕</button></div><div class="row c4">${MODULE_FIELDS.map((f) =>
             fieldHTML(f, (m as unknown as Record<string, number>)[f.key], `data-scope="mod" data-i="${i}" data-key="${f.key}"`),
           ).join("")}</div></div>`,
         )
@@ -243,6 +284,7 @@ function inputsHTML(): string {
     });
   }
 
+  h.push(lookHTML());
   h.push(legsHTML());
 
   const th = (state.params[t] as unknown as { thickness: number }).thickness;
@@ -369,7 +411,7 @@ function applyInput(el: HTMLInputElement | HTMLSelectElement, commit: boolean) {
   }
   if (scope === "mod" && key === "kind") {
     const m = state.params.oshxona.modules[Number(el.dataset.i)];
-    if (m) m.kind = el.value === "yuqori" ? "yuqori" : "past";
+    if (m) m.kind = el.value === "yuqori" ? "yuqori" : el.value === "penal" ? "penal" : "past";
     saveState();
     schedule();
     return;
@@ -447,6 +489,18 @@ function onClick(e: Event) {
     const cur = Number(inp.value) || 0;
     inp.value = String(clamp(cur + Number(d.step), { min: Number(inp.min), max: Number(inp.max) }));
     applyInput(inp, true);
+  } else if (d.fin) {
+    const [key, id] = d.fin.split(":");
+    (state.params[state.type as "shkaf" | "kupe" | "oshxona"] as any)[key] = id;
+    sanitize(state);
+    saveState();
+    renderInputs();
+    schedule();
+  } else if (d.hnd) {
+    (state.params[state.type as "shkaf" | "oshxona"] as any).handles = d.hnd;
+    saveState();
+    renderInputs();
+    schedule();
   } else if (d.leg) {
     const p = state.params[state.type as "shkaf" | "kupe" | "oshxona"];
     p.legType = d.leg as typeof p.legType;

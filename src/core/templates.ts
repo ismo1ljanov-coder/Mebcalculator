@@ -9,6 +9,9 @@ export type LegType = "yoq" | "tsokol" | "nikel";
 /** Krovat/divan oyog'i materiali */
 export type BedLegType = "yogoch" | "nikel" | "plastik";
 
+/** Eshik ochish usuli: oddiy ruchka yoki ruchkasiz (J-profil / gola / push) */
+export type HandleStyle = "ruchka" | "profil";
+
 export type FurnitureItem = { name: string; qty: number; unit: string; note?: string };
 
 export type BuildResult = {
@@ -107,6 +110,9 @@ export type ShkafParams = {
   drawers: number;
   /** Kiyim osish shtangalari soni */
   rods: number;
+  /** Eshik rangi (forms.ts dagi FINISHES id) */
+  color: string;
+  handles: HandleStyle;
   legType: LegType;
   /** Oyoq/tsokol balandligi, mm (umumiy balandlikka kiradi) */
   plinth: number;
@@ -121,6 +127,8 @@ export const SHKAF_DEFAULT: ShkafParams = {
   doors: 2,
   drawers: 0,
   rods: 0,
+  color: "krem",
+  handles: "ruchka",
   legType: "yoq",
   plinth: 0,
 };
@@ -186,6 +194,7 @@ export function buildShkaf(p: ShkafParams): BuildResult {
   const furniture: FurnitureItem[] = [];
   const notes: string[] = [];
   const bodyH = p.height - legHeightOf(p);
+  let profilMm = 0;
 
   // Orqa devor DVP
   const backPanelM2 = ((p.width - 4) * (bodyH - 4)) / 1e6;
@@ -198,7 +207,8 @@ export function buildShkaf(p: ShkafParams): BuildResult {
     const hp = hingesPerDoor(doorH);
     furniture.push({ name: "Sharnir (aylanma, 35 mm)", qty: hp * p.doors, unit: "dona" });
     furniture.push({ name: "Sharnir plankasi", qty: hp * p.doors, unit: "dona" });
-    furniture.push({ name: "Ruchka", qty: p.doors, unit: "dona" });
+    if (p.handles === "profil") profilMm += doorH * p.doors;
+    else furniture.push({ name: "Ruchka", qty: p.doors, unit: "dona" });
   }
 
   if (p.drawers > 0) {
@@ -212,7 +222,8 @@ export function buildShkaf(p: ShkafParams): BuildResult {
     );
     furniture.push({ name: "Tortma yo'naltiruvchi (juft)", qty: p.drawers, unit: "juft" });
     furniture.push({ name: "Tortma taglik DVP", qty: p.drawers, unit: "dona", note: `${dW} x ${dDepth} mm` });
-    furniture.push({ name: "Ruchka (tortma)", qty: p.drawers, unit: "dona" });
+    if (p.handles === "profil") profilMm += (dW + 2 * 13 - 4) * p.drawers;
+    else furniture.push({ name: "Ruchka (tortma)", qty: p.drawers, unit: "dona" });
     if (d > 0) notes.push("Tortmalar birinchi (chap) bo'limga qo'yiladi.");
   }
 
@@ -220,6 +231,7 @@ export function buildShkaf(p: ShkafParams): BuildResult {
     furniture.push({ name: "Javon tayanchi (polka tayanchi)", qty: totalShelves * 4, unit: "dona" });
   }
   addRods(plan.filter((r) => r.rod).length, secW, furniture);
+  addProfil(profilMm, furniture, notes);
   const joints = 8 + d * 4 + totalShelves * 4;
   furniture.push({ name: "Konfirmat (7x50) yoki minifiks", qty: joints, unit: "dona" });
   furniture.push({ name: "DVP mix (mix 3x16)", qty: Math.ceil(((p.width + bodyH) * 2) / 150), unit: "dona", note: "orqa devor uchun, ~150 mm qadam" });
@@ -232,6 +244,13 @@ export function buildShkaf(p: ShkafParams): BuildResult {
   addWallBrackets(p.height, furniture, notes);
 
   return { parts, backPanelM2, furniture, notes };
+}
+
+/** Ruchkasiz eshiklar uchun profil-ruchka (J-profil) metri, 5% zaxira bilan */
+function addProfil(mm: number, furniture: FurnitureItem[], notes: string[]) {
+  if (mm <= 0) return;
+  furniture.push({ name: "Profil-ruchka (J-profil / gola)", qty: Math.ceil(((mm * 1.05) / 1000) * 10) / 10, unit: "m", note: "ruchkasiz ochish uchun, eshik qirrasiga" });
+  notes.push("Ruchkasiz eshiklar: profil-ruchka (yoki bosib ochiladigan push mexanizm) kerak. Profil uchun eshik qirrasida frezerovka hisobga olinsin.");
 }
 
 function addPlanNote(plan: SectionRole[], notes: string[]) {
@@ -346,7 +365,8 @@ export function buildKupe(p: KupeParams): BuildResult {
 // ---------------------------------------------------------------- OSHXONA
 
 export type KitchenModule = {
-  kind: "past" | "yuqori";
+  /** past = pastki tumba, yuqori = osma shkaf, penal = shiftgacha baland ustun shkaf */
+  kind: "past" | "yuqori" | "penal";
   width: number;
   doors: number;
   drawers: number;
@@ -360,6 +380,11 @@ export type OshxonaParams = {
   baseDepth: number;
   wallHeight: number;
   wallDepth: number;
+  /** Penal (baland ustun) umumiy balandligi, oyoq bilan, mm */
+  tallHeight: number;
+  upperColor: string;
+  lowerColor: string;
+  handles: HandleStyle;
   legType: LegType;
   plinth: number;
   modules: KitchenModule[];
@@ -371,6 +396,10 @@ export const OSHXONA_DEFAULT: OshxonaParams = {
   baseDepth: 560,
   wallHeight: 720,
   wallDepth: 320,
+  tallHeight: 2200,
+  upperColor: "kulrang",
+  lowerColor: "eman",
+  handles: "profil",
   legType: "tsokol",
   plinth: 100,
   modules: [
@@ -379,6 +408,7 @@ export const OSHXONA_DEFAULT: OshxonaParams = {
     { kind: "past", width: 600, doors: 2, drawers: 0, shelves: 1 },
     { kind: "yuqori", width: 600, doors: 1, drawers: 0, shelves: 2 },
     { kind: "yuqori", width: 800, doors: 2, drawers: 0, shelves: 2 },
+    { kind: "penal", width: 600, doors: 1, drawers: 0, shelves: 4 },
   ],
 };
 
@@ -394,12 +424,17 @@ export function buildOshxona(p: OshxonaParams): BuildResult {
   let counterMm = 0;
   let slides = 0;
   let legs = 0;
+  let floorMm = 0;
+  let profilMm = 0;
+  const profil = p.handles === "profil";
+  const lhAll = legHeightOf(p);
 
   p.modules.forEach((m, i) => {
     const base = m.kind === "past";
-    const H = base ? p.baseHeight : p.wallHeight;
-    const D = base ? p.baseDepth : p.wallDepth;
-    const label = `${base ? "Past" : "Yuqori"} #${i + 1}: `;
+    const tall = m.kind === "penal";
+    const H = tall ? p.tallHeight - lhAll : base ? p.baseHeight : p.wallHeight;
+    const D = base || tall ? p.baseDepth : p.wallDepth;
+    const label = `${base ? "Past" : tall ? "Penal" : "Yuqori"} #${i + 1}: `;
     const inner = m.width - 2 * t;
 
     parts.push(mk(`${label}Yon devor`, H, D, 2, t, { grain: true, edge: frontEdge }));
@@ -410,10 +445,18 @@ export function buildOshxona(p: OshxonaParams): BuildResult {
     if (base) {
       parts.push(mk(`${label}Ustki planka (old/orqa)`, inner, 100, 2, t, { edge: noEdge }));
       counterMm += m.width;
+      floorMm += m.width;
       legs += m.width > 1000 ? 6 : 4;
     } else {
       parts.push(mk(`${label}Tepa`, inner, D, 1, t, { edge: frontEdge }));
-      parts.push(mk(`${label}Osma planka (devorga)`, inner, 100, 1, t, { edge: noEdge }));
+      if (tall) {
+        // Penal baland: devorga yiqilmasligi uchun orqa kuch planka
+        parts.push(mk(`${label}Orqa kuch planka`, inner, 100, 1, t, { edge: noEdge }));
+        floorMm += m.width;
+        legs += m.width > 1000 ? 6 : 4;
+      } else {
+        parts.push(mk(`${label}Osma planka (devorga)`, inner, 100, 1, t, { edge: noEdge }));
+      }
     }
     if (m.shelves > 0) {
       parts.push(mk(`${label}Javon`, Math.floor(secW) - 2, D - 20, m.shelves * (dv + 1), t, { edge: frontEdge }));
@@ -424,7 +467,8 @@ export function buildOshxona(p: OshxonaParams): BuildResult {
       const doorH = H - 6;
       parts.push(mk(`${label}Eshik`, doorH, doorW, m.doors, t, { grain: true, edge: allEdge }));
       hinges += hingesPerDoor(doorH) * m.doors;
-      handles += m.doors;
+      if (profil) profilMm += (tall ? doorH : doorW) * m.doors;
+      else handles += m.doors;
     }
     if (m.drawers > 0) {
       const each = (H - 3 * (m.drawers + 1)) / m.drawers;
@@ -432,7 +476,8 @@ export function buildOshxona(p: OshxonaParams): BuildResult {
       parts.push(mk(`${label}Tortma yon`, D - 70, each - 40, m.drawers * 2, t, { edge: { ...noEdge, L1: true } }));
       parts.push(mk(`${label}Tortma orqa`, inner - 2 * 13 - 2 * t, each - 40, m.drawers, t, { edge: { ...noEdge, L1: true } }));
       slides += m.drawers;
-      handles += m.drawers;
+      if (profil) profilMm += (m.width - 6) * m.drawers;
+      else handles += m.drawers;
     }
     backM2 += ((m.width - 4) * (H - 4)) / 1e6;
     joints += 8 + dv * 4 + m.shelves * (dv + 1) * 4;
@@ -447,15 +492,23 @@ export function buildOshxona(p: OshxonaParams): BuildResult {
     furniture.push({ name: "Tortma taglik DVP", qty: slides, unit: "dona" });
   }
   if (handles > 0) furniture.push({ name: "Ruchka", qty: handles, unit: "dona" });
+  addProfil(profilMm, furniture, notes);
   furniture.push({ name: "Konfirmat (7x50) yoki minifiks", qty: joints, unit: "dona" });
 
   const nBase = p.modules.filter((m) => m.kind === "past").length;
+  const nTall = p.modules.filter((m) => m.kind === "penal").length;
+  if (nTall > 0) {
+    furniture.push({ name: "Devorga mahkamlash burchagi (penal)", qty: nTall * 2, unit: "dona" });
+    notes.push("Penal (baland ustun): devorga burchaklik bilan mahkamlanadi. Duxovka/muzlatgich nishi kerak bo'lsa, penal o'lchamini texnika pasportiga qarab belgilang.");
+  }
   const lh = legHeightOf(p);
   if (nBase > 0) {
     furniture.push({ name: "Stoleshnitsa", qty: Math.round(counterMm) / 1000, unit: "m (uzunlik)", note: "eni ~600 mm, LDSP emas, alohida material" });
+  }
+  if (nBase + nTall > 0) {
     if (p.legType === "tsokol" && lh > 0) {
       furniture.push({ name: "Rostlanadigan oyoq (plastik)", qty: legs, unit: "dona", note: `${lh} mm` });
-      furniture.push({ name: "Tsokol planka (PVC/alyuminiy)", qty: Math.round(counterMm) / 1000, unit: "m", note: `${lh} mm balandlik` });
+      furniture.push({ name: "Tsokol planka (PVC/alyuminiy)", qty: Math.round(floorMm) / 1000, unit: "m", note: `${lh} mm balandlik` });
     } else if (p.legType === "nikel" && lh > 0) {
       furniture.push({ name: "Nikel (xrom) oyoq", qty: legs, unit: "dona", note: `${lh} mm balandlik` });
       furniture.push({ name: "Oyoq mahkamlash plastinkasi", qty: legs, unit: "dona" });
@@ -464,7 +517,7 @@ export function buildOshxona(p: OshxonaParams): BuildResult {
   }
   const nWall = p.modules.filter((m) => m.kind === "yuqori").length;
   if (nWall > 0) furniture.push({ name: "Osma shkaf mahkamlagichi", qty: nWall * 2, unit: "dona" });
-  const links = Math.max(0, nBase - 1) + Math.max(0, nWall - 1);
+  const links = Math.max(0, nBase + nTall - 1) + Math.max(0, nWall - 1);
   if (links > 0) furniture.push({ name: "Tumbalarni biriktiruvchi bolt/vint", qty: links * 2, unit: "dona", note: "qo'shni modullarni tortib turadi" });
 
   notes.push("Stoleshnitsa, fartuk (devor oralig'i) va texnika uchun kesimlar alohida o'lchanadi.");

@@ -198,7 +198,7 @@ svg.draw .wood { fill: var(--wood); stroke: var(--ink); stroke-width: 1.6; }
 svg.draw .woodin { fill: var(--woodin); }
 svg.draw .shelf { fill: var(--shelf); stroke: var(--ink); stroke-width: 1; }
 svg.draw .door { fill: var(--door); stroke: var(--door-line); stroke-width: 1.3; }
-svg.draw .door.back { fill: color-mix(in srgb, var(--door) 86%, #808080); }
+svg.draw .door.back { filter: brightness(0.93); }
 svg.draw .handle { stroke: var(--ink); stroke-width: 3.5; stroke-linecap: round; }
 svg.draw .floor { stroke: var(--ink); stroke-width: 2.2; }
 svg.draw .tsokol { fill: var(--tsokol); stroke: var(--ink); stroke-width: 1; }
@@ -270,3 +270,10 @@ svg.draw .rodl { stroke: var(--leg); stroke-width: 5; stroke-linecap: round; }
   body.only-labels .lbls { grid-template-columns: repeat(3, 1fr); gap: 4px; }
   .lbl { border-color: #000; padding: 6px 8px; }
 }
+
+/* Rang tanlash */
+.swrow { margin-top: 8px; }
+.swlabel { display: block; margin-bottom: 6px; color: var(--ink2); font-size: 14px; }
+.sws { display: flex; gap: 10px; flex-wrap: wrap; }
+.sw { width: 38px; height: 38px; border-radius: 50%; border: 2px solid var(--line); cursor: pointer; padding: 0; }
+.sw.on { border: 3px solid var(--ink); box-shadow: 0 0 0 3px var(--tape); }

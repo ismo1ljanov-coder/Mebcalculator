@@ -151,11 +151,11 @@ test("kupe: tsokol bilan eshik balandligi oyoqqa mos kamayadi", () => {
 test("oshxona: tsokol -> planka m + plastik oyoq; nikel -> nikel oyoq, planka yo'q", () => {
   const ts = buildOshxona({ ...OSHXONA_DEFAULT, legType: "tsokol" });
   assert.ok(ts.furniture.some((f) => f.name.startsWith("Tsokol planka")));
-  // 3 ta pastki modul (600, 800, 600) -> 3*4 = 12 oyoq
-  assert.equal(ts.furniture.find((f) => f.name.startsWith("Rostlanadigan oyoq"))!.qty, 12);
+  // 3 ta pastki modul (600, 800, 600) + 1 penal (600) -> 4*4 = 16 oyoq
+  assert.equal(ts.furniture.find((f) => f.name.startsWith("Rostlanadigan oyoq"))!.qty, 16);
   const nk = buildOshxona({ ...OSHXONA_DEFAULT, legType: "nikel", plinth: 150 });
   assert.ok(!nk.furniture.some((f) => f.name.startsWith("Tsokol planka")));
-  assert.equal(nk.furniture.find((f) => f.name.startsWith("Nikel"))!.qty, 12);
+  assert.equal(nk.furniture.find((f) => f.name.startsWith("Nikel"))!.qty, 16);
   const none = buildOshxona({ ...OSHXONA_DEFAULT, legType: "yoq" });
   assert.ok(!none.furniture.some((f) => /oyoq/i.test(f.name)));
 });
@@ -260,4 +260,28 @@ test("kupe antresol: alohida detallar, sharnir va eshiklar hisobga kiradi, kupe 
   const calc = calculate(r, SHEET, PRICES);
   const placed = calc.groups.reduce((s, g) => s + g.pack.sheets.reduce((x, sh) => x + sh.placements.length, 0), 0);
   assert.equal(placed, total);
+});
+
+test("oshxona penal: baland ustun, kuch planka, burchak va profil-ruchka hisobga kiradi", () => {
+  const o = buildOshxona(OSHXONA_DEFAULT);
+  const yon = o.parts.find((p) => p.name.startsWith("Penal") && p.name.endsWith("Yon devor"))!;
+  assert.equal(yon.length, OSHXONA_DEFAULT.tallHeight - OSHXONA_DEFAULT.plinth);
+  assert.ok(o.parts.some((p) => p.name.includes("Orqa kuch planka")));
+  assert.ok(o.furniture.some((f) => f.name.startsWith("Devorga mahkamlash burchagi")));
+  // default: ruchkasiz profil
+  assert.ok(o.furniture.some((f) => f.name.startsWith("Profil-ruchka") && f.unit === "m" && f.qty > 5));
+  assert.ok(!o.furniture.some((f) => f.name === "Ruchka"));
+  const withHandle = buildOshxona({ ...OSHXONA_DEFAULT, handles: "ruchka" });
+  assert.ok(withHandle.furniture.some((f) => f.name === "Ruchka"));
+  assert.ok(!withHandle.furniture.some((f) => f.name.startsWith("Profil-ruchka")));
+  // tsokol planka penal kengligini ham o'z ichiga oladi
+  const tp = o.furniture.find((f) => f.name.startsWith("Tsokol planka"))!;
+  const lowerW = OSHXONA_DEFAULT.modules.filter((m) => m.kind !== "yuqori").reduce((q, m) => q + m.width, 0);
+  assert.equal(Math.round(tp.qty * 1000), lowerW);
+});
+
+test("shkaf ruchkasiz: ruchka o'rniga profil", () => {
+  const r = buildShkaf({ ...SHKAF_DEFAULT, handles: "profil" });
+  assert.ok(r.furniture.some((f) => f.name.startsWith("Profil-ruchka")));
+  assert.ok(!r.furniture.some((f) => f.name === "Ruchka"));
 });

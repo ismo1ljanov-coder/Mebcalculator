@@ -2,15 +2,16 @@
 // Orqada turgan bo'laklar oldin chiziladi (ressomlar usuli), tartib har bir juft bo'lak orasidagi
 // ajratuvchi tekislik bo'yicha aniqlanadi, shuning uchun istalgan burchakdan to'g'ri chiqadi.
 import { dividerCount, legCountFor, legHeightOf, sectionPlan, shelfYs } from "../core/templates.ts";
+import { finishHex } from "./forms.ts";
 import type { AppState } from "./forms.ts";
 
 export type Mat = "body" | "back" | "door" | "leg" | "tsokol" | "counter" | "mattress" | "fabric" | "handle" | "wood" | "alu" | "fartuk";
 
-export type Box = { x0: number; x1: number; y0: number; y1: number; z0: number; z1: number; mat: Mat };
+export type Box = { x0: number; x1: number; y0: number; y1: number; z0: number; z1: number; mat: Mat; color?: string };
 export type View = { yaw: number; pitch: number };
 export type Scene = { boxes: Box[] };
 
-const bx = (x0: number, x1: number, y0: number, y1: number, z0: number, z1: number, mat: Mat): Box => ({ x0, x1, y0, y1, z0, z1, mat });
+const bx = (x0: number, x1: number, y0: number, y1: number, z0: number, z1: number, mat: Mat, color?: string): Box => ({ x0, x1, y0, y1, z0, z1, mat, ...(color ? { color } : {}) });
 
 /** x: eni (o'ngga), y: balandlik (yuqoriga), z: chuqurlik (kuzatuvchi tomonga; old tomon = katta z) */
 export function buildScene(state: AppState, opts: { inside?: boolean } = {}): Scene {
@@ -59,7 +60,8 @@ export function buildScene(state: AppState, opts: { inside?: boolean } = {}): Sc
           B.push(bx(secX(k) + 3, secX(k) + secW - 3, y0, y0 + dh, dz, dz + t, "door"));
           if (!behind) {
             const cx = secX(k) + secW / 2;
-            B.push(bx(cx - 70, cx + 70, y0 + dh / 2 - 7, y0 + dh / 2 + 7, dz + t, dz + t + 18, "handle"));
+            if (state.type === "shkaf" && state.params.shkaf.handles === "profil") B.push(bx(secX(k) + 3, secX(k) + secW - 3, y0 + dh - 16, y0 + dh - 3, dz + t, dz + t + 3, "handle"));
+            else B.push(bx(cx - 70, cx + 70, y0 + dh / 2 - 7, y0 + dh / 2 + 7, dz + t, dz + t + 18, "handle"));
           }
         }
       });
@@ -72,9 +74,15 @@ export function buildScene(state: AppState, opts: { inside?: boolean } = {}): Sc
           for (let i = 0; i < n; i++) {
             const x0 = gap + i * (dw + gap);
             B.push(bx(x0, x0 + dw, doorBottom, H - gap, D, D + t, "door"));
-            const hx = i % 2 === 0 || n === 1 ? x0 + dw - 50 : x0 + 36;
-            const hy = (doorBottom + H - gap) / 2;
-            B.push(bx(hx, hx + 14, hy - 70, hy + 70, D + t, D + t + 18, "handle"));
+            if (state.params.shkaf.handles === "profil") {
+              // Ruchkasiz: eshik qirrasida qora profil chizig'i
+              const sx = i % 2 === 0 || n === 1 ? x0 + dw - 20 : x0 + 6;
+              B.push(bx(sx, sx + 14, doorBottom + 6, H - gap - 6, D + t, D + t + 3, "handle"));
+            } else {
+              const hx = i % 2 === 0 || n === 1 ? x0 + dw - 50 : x0 + 36;
+              const hy = (doorBottom + H - gap) / 2;
+              B.push(bx(hx, hx + 14, hy - 70, hy + 70, D + t, D + t + 18, "handle"));
+            }
           }
         }
       }
@@ -125,6 +133,8 @@ export function buildScene(state: AppState, opts: { inside?: boolean } = {}): Sc
           for (const x of xs) for (const z of [50, D - 80]) B.push(bx(x, x + 26, 0, lh, z, z + 26, "leg"));
         }
       }
+      const dc = finishHex(p.color);
+      for (const b of B) if (b.mat === "door") b.color = dc;
       return { boxes: B };
     }
 
@@ -133,60 +143,75 @@ export function buildScene(state: AppState, opts: { inside?: boolean } = {}): Sc
       const t = k.thickness;
       const lh = legHeightOf(k);
       const gapMid = 550;
-      const baseMods = k.modules.filter((m) => m.kind === "past");
+      const up = finishHex(k.upperColor);
+      const low = finishHex(k.lowerColor);
+      const profil = k.handles === "profil";
+      const D = k.baseDepth;
+      const lowerMods = k.modules.filter((m) => m.kind !== "yuqori");
       const wallMods = k.modules.filter((m) => m.kind === "yuqori");
-      const baseW = baseMods.reduce((s, m) => s + m.width, 0);
+      let leading = 0;
+      for (const m of lowerMods) {
+        if (m.kind === "penal") leading += m.width;
+        else break;
+      }
+      // Eshik yoki tortma fasadi + ochish usuli (ruchka yoki ruchkasiz profil)
+      const front = (kind: "base" | "wall" | "tall" | "drawer", x0: number, x1: number, y0: number, y1: number, z: number, color: string, i: number) => {
+        B.push(bx(x0, x1, y0, y1, z, z + t, "door", color));
+        const zf = z + t;
+        if (profil) {
+          if (kind === "base" || kind === "drawer") B.push(bx(x0, x1, y1 - 18, y1 - 4, zf, zf + 3, "handle"));
+          else if (kind === "wall") B.push(bx(x0, x1, y0 + 4, y0 + 18, zf, zf + 3, "handle"));
+          else {
+            const sx = i % 2 === 0 ? x1 - 20 : x0 + 6;
+            B.push(bx(sx, sx + 14, y0 + 6, y1 - 6, zf, zf + 3, "handle"));
+          }
+        } else if (kind === "drawer") {
+          B.push(bx((x0 + x1) / 2 - 60, (x0 + x1) / 2 + 60, y1 - 40, y1 - 28, zf, zf + 16, "handle"));
+        } else {
+          const hx = i % 2 === 0 ? x1 - 38 : x0 + 22;
+          if (kind === "base") B.push(bx(hx, hx + 12, y1 - 190, y1 - 70, zf, zf + 16, "handle"));
+          else if (kind === "wall") B.push(bx(hx, hx + 12, y0 + 70, y0 + 190, zf, zf + 16, "handle"));
+          else B.push(bx(hx, hx + 12, (y0 + y1) / 2 - 100, (y0 + y1) / 2 + 100, zf, zf + 16, "handle"));
+        }
+      };
       let x = 0;
-      for (const m of baseMods) {
+      for (const m of lowerMods) {
+        const tall = m.kind === "penal";
         const y0 = lh;
-        const y1 = lh + k.baseHeight;
-        B.push(bx(x, x + m.width, y0, y1, 0, k.baseDepth, "body"));
+        const y1 = tall ? k.tallHeight : lh + k.baseHeight;
+        B.push(bx(x, x + m.width, y0, y1, 0, D, "body"));
+        const kind = tall ? "tall" : "base";
         if (m.doors > 0) {
           const dw = m.width / m.doors;
-          for (let i = 0; i < m.doors; i++) {
-            const dx = x + i * dw + 2;
-            B.push(bx(dx, dx + dw - 4, y0 + 2, y1 - 2, k.baseDepth, k.baseDepth + t, "door"));
-            const hx = i % 2 === 0 ? dx + dw - 40 : dx + 22;
-            B.push(bx(hx, hx + 12, y1 - 190, y1 - 70, k.baseDepth + t, k.baseDepth + t + 16, "handle"));
-          }
+          for (let i = 0; i < m.doors; i++) front(kind, x + i * dw + 2, x + (i + 1) * dw - 2, y0 + 2, y1 - 2, D, low, i);
         }
         if (m.drawers > 0) {
-          const dh = (k.baseHeight - 4) / m.drawers;
-          for (let i = 0; i < m.drawers; i++) {
-            const dy = y0 + 2 + i * dh;
-            B.push(bx(x + 2, x + m.width - 2, dy, dy + dh - 3, k.baseDepth, k.baseDepth + t, "door"));
-            B.push(bx(x + m.width / 2 - 60, x + m.width / 2 + 60, dy + dh - 40, dy + dh - 28, k.baseDepth + t, k.baseDepth + t + 16, "handle"));
-          }
+          const dh = (y1 - y0 - 4) / m.drawers;
+          for (let i = 0; i < m.drawers; i++) front("drawer", x + 2, x + m.width - 2, y0 + 2 + i * dh, y0 + 2 + (i + 1) * dh - 3, D, low, 0);
         }
+        if (!tall) B.push(bx(x, x + m.width, lh + k.baseHeight, lh + k.baseHeight + 38, 0, D + 30, "counter"));
         if (lh > 0 && k.legType === "nikel") {
           const n = legCountFor(m.width);
           const xs = n >= 6 ? [x + 40, x + m.width / 2 - 13, x + m.width - 66] : [x + 40, x + m.width - 66];
-          for (const lx of xs) for (const z of [50, k.baseDepth - 80]) B.push(bx(lx, lx + 26, 0, lh, z, z + 26, "leg"));
+          for (const lx of xs) for (const z of [50, D - 80]) B.push(bx(lx, lx + 26, 0, lh, z, z + 26, "leg"));
         } else if (lh > 0 && k.legType === "tsokol") {
-          for (const lx of [x + 40, x + m.width - 70]) for (const z of [50, k.baseDepth - 120]) B.push(bx(lx, lx + 30, 0, lh - 3, z, z + 30, "leg"));
+          B.push(bx(x, x + m.width, 0, lh - 3, D - 66, D - 50, "tsokol"));
+          for (const lx of [x + 40, x + m.width - 70]) for (const z of [50, D - 120]) B.push(bx(lx, lx + 30, 0, lh - 3, z, z + 30, "leg"));
         }
         x += m.width;
       }
-      if (baseW > 0) {
-        B.push(bx(0, baseW, lh + k.baseHeight, lh + k.baseHeight + 38, 0, k.baseDepth + 30, "counter"));
-        if (lh > 0 && k.legType === "tsokol") B.push(bx(0, baseW, 0, lh - 3, k.baseDepth - 66, k.baseDepth - 50, "tsokol"));
+      const wallW = wallMods.reduce((q, m) => q + m.width, 0);
+      const wy0 = lh + k.baseHeight + gapMid;
+      if (wallMods.length > 0 && lowerMods.some((m) => m.kind === "past")) {
+        const fEnd = Math.min(x, leading + wallW);
+        if (fEnd > leading) B.push(bx(leading, fEnd, lh + k.baseHeight + 38, wy0, 0, 12, "fartuk"));
       }
-      if (baseW > 0 && wallMods.length > 0) {
-        const wxEnd = Math.min(baseW, wallMods.reduce((q, m) => q + m.width, 0));
-        B.push(bx(0, wxEnd, lh + k.baseHeight + 38, lh + k.baseHeight + 38 + gapMid - 38, 0, 12, "fartuk"));
-      }
-      let wx = 0;
-      const wy0 = lh + k.baseHeight + 38 + gapMid - 38;
+      let wx = leading;
       for (const m of wallMods) {
         B.push(bx(wx, wx + m.width, wy0, wy0 + k.wallHeight, 0, k.wallDepth, "body"));
         if (m.doors > 0) {
           const dw = m.width / m.doors;
-          for (let i = 0; i < m.doors; i++) {
-            const dx = wx + i * dw + 2;
-            B.push(bx(dx, dx + dw - 4, wy0 + 2, wy0 + k.wallHeight - 2, k.wallDepth, k.wallDepth + t, "door"));
-            const hx = i % 2 === 0 ? dx + dw - 40 : dx + 22;
-            B.push(bx(hx, hx + 12, wy0 + 70, wy0 + 190, k.wallDepth + t, k.wallDepth + t + 16, "handle"));
-          }
+          for (let i = 0; i < m.doors; i++) front("wall", wx + i * dw + 2, wx + (i + 1) * dw - 2, wy0 + 2, wy0 + k.wallHeight - 2, k.wallDepth, up, i);
         }
         wx += m.width;
       }
@@ -420,7 +445,7 @@ export function renderScene(scene: Scene, view: View): string {
   const { order } = orderBoxes(boxes, c, rects);
   for (const i of order) {
     const b = boxes[i];
-    const hex = MAT[b.mat];
+    const hex = b.color ?? MAT[b.mat];
     for (const f of FACES) {
       if (f.n[0] * c[0] + f.n[1] * c[1] + f.n[2] * c[2] <= 1e-6) continue;
       const nv = rot(f.n[0], f.n[1], f.n[2]);

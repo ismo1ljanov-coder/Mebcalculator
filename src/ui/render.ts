@@ -2,6 +2,7 @@ import type { CalcResult } from "../core/calculator.ts";
 import { dividerCount, legCountFor, legHeightOf, sectionPlan, shelfYs } from "../core/templates.ts";
 import type { BuildResult, FurnitureType, KitchenModule } from "../core/templates.ts";
 import type { PackedSheet, Part } from "../core/types.ts";
+import { finishHex } from "./forms.ts";
 import type { AppState } from "./forms.ts";
 
 export function esc(s: string): string {
@@ -267,9 +268,12 @@ function frontCabinet(o: {
   sliding: number;
   drawers: number;
   rods: number;
+  color: string;
+  profil: boolean;
   u: number;
 }): string {
-  const { x, y, W, H, t, legH, legType, shelves, doors, sliding, drawers, rods, u } = o;
+  const { x, y, W, H, t, legH, legType, shelves, doors, sliding, drawers, rods, color, profil, u } = o;
+  const fill = `style="fill:${color}"`;
   const bodyH = H - legH;
   const g: string[] = [];
   g.push(`<rect x="${x}" y="${y}" width="${W}" height="${bodyH}" class="wood"/>`);
@@ -291,7 +295,7 @@ function frontCabinet(o: {
     if (role.rod) g.push(`<line x1="${secX(k) + 10}" y1="${y + t + 140}" x2="${secX(k) + secW - 10}" y2="${y + t + 140}" class="rodl"/>`);
     for (let i = 0; i < role.drawers; i++) {
       const dy = floorY - 3 - (i + 1) * (dh + 4) + 4;
-      g.push(`<rect x="${secX(k) + 3}" y="${dy}" width="${secW - 6}" height="${dh}" class="door"/><line x1="${secX(k) + secW / 2 - 60}" y1="${dy + dh / 2}" x2="${secX(k) + secW / 2 + 60}" y2="${dy + dh / 2}" class="handle"/>`);
+      g.push(`<rect x="${secX(k) + 3}" y="${dy}" width="${secW - 6}" height="${dh}" class="door" ${fill}/><line x1="${secX(k) + secW / 2 - 60}" y1="${dy + dh / 2}" x2="${secX(k) + secW / 2 + 60}" y2="${dy + dh / 2}" class="handle"/>`);
     }
   });
   const dH = bodyH - 6;
@@ -300,10 +304,15 @@ function frontCabinet(o: {
     const dw = (W - gap * (doors + 1)) / doors;
     for (let i = 0; i < doors; i++) {
       const dx = x + gap + i * (dw + gap);
-      g.push(`<rect x="${dx}" y="${y + gap}" width="${dw}" height="${dH}" class="door"/>`);
-      const hx = doors === 1 ? dx + dw - 45 : i % 2 === 0 ? dx + dw - 45 : dx + 45;
-      const hy = y + gap + dH / 2;
-      g.push(`<line x1="${hx}" y1="${hy - 70}" x2="${hx}" y2="${hy + 70}" class="handle"/>`);
+      g.push(`<rect x="${dx}" y="${y + gap}" width="${dw}" height="${dH}" class="door" ${fill}/>`);
+      if (profil) {
+        const hx = doors === 1 || i % 2 === 0 ? dx + dw - 10 : dx + 10;
+        g.push(`<line x1="${hx}" y1="${y + gap + 20}" x2="${hx}" y2="${y + gap + dH - 20}" class="handle"/>`);
+      } else {
+        const hx = doors === 1 ? dx + dw - 45 : i % 2 === 0 ? dx + dw - 45 : dx + 45;
+        const hy = y + gap + dH / 2;
+        g.push(`<line x1="${hx}" y1="${hy - 70}" x2="${hx}" y2="${hy + 70}" class="handle"/>`);
+      }
     }
   }
   if (sliding > 0) {
@@ -311,7 +320,7 @@ function frontCabinet(o: {
     const dw = (W - 2 * t + overlap * (sliding - 1)) / sliding;
     for (let i = 0; i < sliding; i++) {
       const dx = x + t + i * (dw - overlap);
-      g.push(`<rect x="${dx}" y="${y + t}" width="${dw}" height="${bodyH - 2 * t}" class="door ${i % 2 ? "back" : ""}"/>`);
+      g.push(`<rect x="${dx}" y="${y + t}" width="${dw}" height="${bodyH - 2 * t}" class="door ${i % 2 ? "back" : ""}" ${fill}/>`);
       // Ruchka o'rniga alyuminiy ramka profili
       const bar = Math.max(14, u * 0.45);
       g.push(`<rect x="${dx}" y="${y + t}" width="${bar}" height="${bodyH - 2 * t}" class="legn"/><rect x="${dx + dw - bar}" y="${y + t}" width="${bar}" height="${bodyH - 2 * t}" class="legn"/>`);
@@ -348,7 +357,7 @@ export function drawingSVG(state: AppState): string {
         antresolSvg = `<rect x="${x0}" y="${y0}" width="${p.width}" height="${A}" class="wood"/>`;
         for (let i = 0; i < dn; i++) {
           const dx = x0 + 3 + i * (dw + 3);
-          antresolSvg += `<rect x="${dx}" y="${y0 + 3}" width="${dw}" height="${A - 6}" class="door"/><line x1="${i % 2 === 0 ? dx + dw - 28 : dx + 28}" y1="${y0 + A - 40}" x2="${i % 2 === 0 ? dx + dw - 28 : dx + 28}" y2="${y0 + A - 40 - Math.min(110, A * 0.5)}" class="handle"/>`;
+          antresolSvg += `<rect x="${dx}" y="${y0 + 3}" width="${dw}" height="${A - 6}" class="door" style="fill:${finishHex(p.color)}"/><line x1="${i % 2 === 0 ? dx + dw - 28 : dx + 28}" y1="${y0 + A - 40}" x2="${i % 2 === 0 ? dx + dw - 28 : dx + 28}" y2="${y0 + A - 40 - Math.min(110, A * 0.5)}" class="handle"/>`;
         }
       }
       const body = antresolSvg + frontCabinet({
@@ -364,6 +373,8 @@ export function drawingSVG(state: AppState): string {
         sliding: state.type === "kupe" ? state.params.kupe.sliding : 0,
         drawers: p.drawers,
         rods: p.rods,
+        color: finishHex(p.color),
+        profil: state.type === "shkaf" && state.params.shkaf.handles === "profil",
         u,
       });
       const floorY = y0 + p.height;
@@ -378,53 +389,86 @@ export function drawingSVG(state: AppState): string {
     case "oshxona": {
       const k = state.params.oshxona;
       const legH = legHeightOf(k);
-      const baseMods = k.modules.filter((m) => m.kind === "past");
+      const lowerMods = k.modules.filter((m) => m.kind !== "yuqori");
       const wallMods = k.modules.filter((m) => m.kind === "yuqori");
-      const baseW = baseMods.reduce((s, m) => s + m.width, 0);
-      const wallW = wallMods.reduce((s, m) => s + m.width, 0);
-      const rowW = Math.max(baseW, wallW, 600);
+      const lowerW = lowerMods.reduce((q, m) => q + m.width, 0);
+      const wallW = wallMods.reduce((q, m) => q + m.width, 0);
+      let leading = 0;
+      for (const m of lowerMods) {
+        if (m.kind === "penal") leading += m.width;
+        else break;
+      }
+      const rowW = Math.max(lowerW, leading + wallW, 600);
       const gapMid = 550;
       const hasWall = wallMods.length > 0;
-      const totalH = (hasWall ? k.wallHeight + gapMid : 0) + legH + k.baseHeight + 38;
+      const hasTall = lowerMods.some((m) => m.kind === "penal");
+      const stdH = (hasWall ? k.wallHeight + gapMid : 0) + legH + k.baseHeight + 38;
+      const totalH = Math.max(stdH, hasTall ? k.tallHeight : 0);
       const u = Math.max(rowW, totalH) / 42;
       const x0 = u * 1.5;
       const y0 = u * 1.2;
       const floorY = y0 + totalH;
+      const up = finishHex(k.upperColor);
+      const low = finishHex(k.lowerColor);
+      const profil = k.handles === "profil";
       const g: string[] = [];
-      const row = (mods: KitchenModule[], top: number, h: number) => {
-        let x = x0;
-        for (const m of mods) {
-          g.push(`<rect x="${x}" y="${top}" width="${m.width}" height="${h}" class="wood"/>`);
-          if (m.doors > 0) {
-            const dw = m.width / m.doors;
-            for (let i = 0; i < m.doors; i++) g.push(`<rect x="${x + i * dw + 3}" y="${top + 3}" width="${dw - 6}" height="${h - 6}" class="door"/>`);
+      const draw = (m: KitchenModule, x: number, top: number, h: number, color: string, kind: "base" | "wall" | "tall") => {
+        g.push(`<rect x="${x}" y="${top}" width="${m.width}" height="${h}" class="wood"/>`);
+        const slot = (px: number, py: number, w: number, hh: number, i: number) => {
+          if (profil) {
+            if (kind === "tall") {
+              const hx = i % 2 === 0 ? px + w - 10 : px + 10;
+              g.push(`<line x1="${hx}" y1="${py + 16}" x2="${hx}" y2="${py + hh - 16}" class="handle"/>`);
+            } else {
+              const ly = kind === "base" ? py + 10 : py + hh - 10;
+              g.push(`<line x1="${px + 8}" y1="${ly}" x2="${px + w - 8}" y2="${ly}" class="handle"/>`);
+            }
+          } else {
+            const hx = i % 2 === 0 ? px + w - 28 : px + 28;
+            const hy = kind === "base" ? py + 20 : kind === "wall" ? py + hh - 120 : py + hh / 2 - 90;
+            g.push(`<line x1="${hx}" y1="${hy}" x2="${hx}" y2="${hy + 100}" class="handle"/>`);
           }
-          if (m.drawers > 0) {
-            const dh = h / m.drawers;
-            for (let i = 0; i < m.drawers; i++) g.push(`<rect x="${x + 3}" y="${top + i * dh + 3}" width="${m.width - 6}" height="${dh - 6}" class="door"/>`);
+        };
+        if (m.doors > 0) {
+          const dw = m.width / m.doors;
+          for (let i = 0; i < m.doors; i++) {
+            const px = x + i * dw + 3;
+            g.push(`<rect x="${px}" y="${top + 3}" width="${dw - 6}" height="${h - 6}" class="door" style="fill:${color}"/>`);
+            slot(px, top + 3, dw - 6, h - 6, i);
           }
-          g.push(`<text x="${x + m.width / 2}" y="${top + h / 2 + u * 0.6}" font-size="${u * 1.5}" text-anchor="middle" class="mini">${m.width}</text>`);
-          x += m.width;
         }
+        if (m.drawers > 0) {
+          const dh = h / m.drawers;
+          for (let i = 0; i < m.drawers; i++) {
+            const py = top + i * dh + 3;
+            g.push(`<rect x="${x + 3}" y="${py}" width="${m.width - 6}" height="${dh - 6}" class="door" style="fill:${color}"/>`);
+            const ly = py + (profil ? 10 : 22);
+            const half = profil ? (m.width - 22) / 2 : 70;
+            g.push(`<line x1="${x + m.width / 2 - half}" y1="${ly}" x2="${x + m.width / 2 + half}" y2="${ly}" class="handle"/>`);
+          }
+        }
+        g.push(`<text x="${x + m.width / 2}" y="${top + h / 2 + u * 0.6}" font-size="${u * 1.5}" text-anchor="middle" class="mini">${m.width}</text>`);
       };
-      let top = y0;
-      if (hasWall) {
-        row(wallMods, top, k.wallHeight);
-        top += k.wallHeight + gapMid;
+      const wallTop = floorY - stdH;
+      const baseTop = floorY - legH - k.baseHeight;
+      let wx = x0 + leading;
+      for (const m of wallMods) {
+        draw(m, wx, wallTop, k.wallHeight, up, "wall");
+        wx += m.width;
       }
-      row(baseMods, top, k.baseHeight);
-      // stoleshnitsa
-      if (baseW > 0) g.push(`<rect x="${x0 - 12}" y="${top - 38}" width="${baseW + 24}" height="38" class="counter"/>`);
-      const baseBottom = top + k.baseHeight;
-      if (legH > 0 && baseW > 0) {
-        if (k.legType === "tsokol") g.push(`<rect x="${x0}" y="${baseBottom}" width="${baseW}" height="${legH - 3}" class="tsokol"/>`);
-        else {
-          let x = x0;
-          for (const m of baseMods) {
-            g.push(nikelLegs(x, baseBottom, m.width, legH, legCountFor(m.width), u));
-            x += m.width;
-          }
+      let x = x0;
+      for (const m of lowerMods) {
+        if (m.kind === "penal") {
+          draw(m, x, floorY - k.tallHeight, k.tallHeight - legH, low, "tall");
+        } else {
+          draw(m, x, baseTop, k.baseHeight, low, "base");
+          g.push(`<rect x="${x - 6}" y="${baseTop - 38}" width="${m.width + 12}" height="38" class="counter"/>`);
         }
+        if (legH > 0) {
+          if (k.legType === "tsokol") g.push(`<rect x="${x}" y="${floorY - legH}" width="${m.width}" height="${legH - 3}" class="tsokol"/>`);
+          else g.push(nikelLegs(x, floorY - legH, m.width, legH, legCountFor(m.width), u));
+        }
+        x += m.width;
       }
       g.push(`<line x1="${x0 - u}" y1="${floorY}" x2="${x0 + rowW + u}" y2="${floorY}" class="floor"/>`);
       g.push(tapeH(x0, x0 + rowW, floorY + u * 1.2, `${rowW}`, u));
@@ -493,7 +537,7 @@ export const elevationSVG = drawingSVG;
 export function describeState(state: AppState): string {
   if (state.type === "oshxona") {
     const m = state.params.oshxona.modules;
-    const len = m.filter((x) => x.kind === "past").reduce((s, x) => s + x.width, 0);
+    const len = m.filter((x) => x.kind !== "yuqori").reduce((s, x) => s + x.width, 0);
     return `${m.length} modul, pastki qator ${len} mm`;
   }
   const p = state.params[state.type] as unknown as Record<string, number>;
